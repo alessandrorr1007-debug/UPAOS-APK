@@ -23,3 +23,9 @@ fun canvasNativeRoute(raw: String): CanvasNativeRoute? {
 fun canvasVisibleTabs(tabs: List<CanvasTab>): Set<String> = tabs.filter {
     it.hidden != true && it.visibility !in setOf("admins", "none")
 }.map { it.id }.toSet()
+
+fun canvasIsSubmissionUrl(raw: String): Boolean {
+    val url = "https://upao.instructure.com/".toHttpUrl().resolve(raw) ?: return false
+    return TrustedServers.isCanvas(url) && "submissions" in url.pathSegments &&
+        url.pathSegments.firstOrNull() == "courses"
+}

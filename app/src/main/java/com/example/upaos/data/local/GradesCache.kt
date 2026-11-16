@@ -16,12 +16,13 @@ private val Context.gradesDataStore by preferencesDataStore("notas_cache")
  * ultima_actualizacion real del backend), así el timestamp siempre viaja
  * junto con los datos que le corresponden.
  */
-class GradesCache(private val context: Context) {
+class GradesCache(private val context: Context,
+    private val store: androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences> = context.gradesDataStore) {
 
     suspend fun guardar(clave: String, json: String) {
         val user = clave.split('_').firstOrNull { it.matches(Regex("[0-9]{9}")) }
         if (user != null && (AccountPrivacy.isDeleting(user) || !TokenManager(context).containsAccount(user))) return
-        context.gradesDataStore.edit { prefs ->
+        store.edit { prefs ->
             prefs[stringPreferencesKey("notas_$clave")] = json
             prefs[longPreferencesKey("time_$clave")] = System.currentTimeMillis()
         }
@@ -29,20 +30,20 @@ class GradesCache(private val context: Context) {
 
     suspend fun limpiar(usuario: String) {
         val user = usuario.trim().lowercase()
-        context.gradesDataStore.edit { prefs ->
+        store.edit { prefs ->
             prefs.asMap().keys.filter { it.name.split('_').contains(user) }.forEach { prefs.remove(it) }
         }
     }
 
-    fun observarFecha(clave: String) = context.gradesDataStore.data.map { it[longPreferencesKey("time_$clave")] }
+    fun observarFecha(clave: String) = store.data.map { it[longPreferencesKey("time_$clave")] }
 
     suspend fun cargar(clave: String): String? {
-        val prefs = context.gradesDataStore.data.first()
+        val prefs = store.data.first()
         return prefs[stringPreferencesKey("notas_$clave")]
     }
 
     suspend fun obtenerCursosActuales(usuario: String?): List<String> {
-        val prefs = context.gradesDataStore.data.first()
+        val prefs = store.data.first()
         val gson = com.google.gson.Gson()
         val nombres = linkedSetOf<String>()
 

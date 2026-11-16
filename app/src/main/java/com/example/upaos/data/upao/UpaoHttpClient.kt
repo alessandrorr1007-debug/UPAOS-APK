@@ -23,7 +23,9 @@ object UpaoHttpClient {
         @Volatile private var valid = true
         fun requireValid() { if (!valid) throw kotlinx.coroutines.CancellationException("La cuenta cambió") }
         internal fun invalidate() { valid = false; authenticatedUser = null; cookieJar.invalidate(); client.dispatcher.cancelAll() }
-        val client: OkHttpClient = buildClient(cookieJar).newBuilder().addInterceptor { chain ->
+        // Share the dispatcher so account invalidation cancels both synchronous and callback calls.
+        internal val callbackClient = buildClient(cookieJar)
+        val client: OkHttpClient = callbackClient.newBuilder().addInterceptor { chain ->
             requireValid()
             val response = chain.proceed(chain.request())
             try {

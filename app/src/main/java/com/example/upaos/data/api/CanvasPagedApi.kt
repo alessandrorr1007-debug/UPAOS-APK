@@ -71,9 +71,9 @@ internal suspend fun <T> collectCanvasPages(
     origin: HttpUrl,
     firstPage: suspend () -> Response<List<T>>,
     nextPage: suspend (String) -> Response<List<T>>,
-    maxPages: Int = 100
+    maxPages: Int? = 100
 ): Response<List<T>> {
-    require(maxPages > 0)
+    require(maxPages == null || maxPages > 0)
     var response = firstPage()
     val first = response.raw().request.url
     if (!sameOrigin(origin, first) || !isCanvasApiPath(first)) { response.errorBody()?.close(); throw IOException("Origen de Canvas no autorizado") }
@@ -94,7 +94,7 @@ internal suspend fun <T> collectCanvasPages(
         items += response.body() ?: throw IOException("Página de Canvas sin contenido")
         pages++
         val target = canvasNextLink(response.headers().values("Link")) ?: break
-        if (pages >= maxPages) throw IOException("La lista de Canvas supera el límite de páginas")
+        if (maxPages != null && pages >= maxPages) throw IOException("La lista de Canvas supera el límite de páginas")
         val next = actual.resolve(target) ?: throw IOException("Enlace de paginación inválido")
         if (!sameOrigin(origin, next) || !isCanvasApiPath(next))
             throw IOException("Destino de paginación no autorizado")
@@ -111,7 +111,7 @@ class CanvasPagedApi(
     private val origin: HttpUrl = "https://upao.instructure.com/".toHttpUrl(),
     private val gson: Gson = Gson()
 ) : CanvasApiService by delegate {
-    private suspend inline fun <reified T> all(auth: String, noinline first: suspend () -> Response<List<T>>): Response<List<T>> =
+    private suspend inline fun <reified T> all(auth: String, maxPages: Int? = 100, noinline first: suspend () -> Response<List<T>>): Response<List<T>> =
         collectCanvasPages(origin, first, { url ->
             val raw = delegate.getListPage(auth, url)
             if (!raw.isSuccessful) Response.error(raw.errorBody() ?: "".toResponseBody(), raw.raw())
@@ -120,7 +120,7 @@ class CanvasPagedApi(
                 val items = json.map { gson.fromJson(it, T::class.java) ?: throw IOException("Registro de Canvas inválido") }
                 Response.success(items, raw.raw())
             }
-        })
+        }, maxPages)
 
 
     override suspend fun getAnnouncements(auth: String, contexts: List<String>, start: String, end: String, active: Boolean, perPage: Int) =
@@ -149,10 +149,10 @@ class CanvasPagedApi(
         return Response.success(CanvasQuizSubmissions(result.body()), result.raw())
     }
 
-    override suspend fun getActiveCourses(authHeader: String, state: String, perPage: Int, page: Int) =
-        all(authHeader) { delegate.getActiveCourses(authHeader, state, perPage, page) }
+    override suspend fun getActiveCourses(authHeader: String, state: String, perPage: Int, page: Int, enrollmentType: String?) =
+        all(authHeader, maxPages = null) { delegate.getActiveCourses(authHeader, state, perPage, page, enrollmentType) }
     override suspend fun getCourseAssignments(authHeader: String, courseId: Long, perPage: Int, page: Int) =
-        all(authHeader) { delegate.getCourseAssignments(authHeader, courseId, perPage, page) }
+        all(authHeader, maxPages = null) { delegate.getCourseAssignments(authHeader, courseId, perPage, page) }
     override suspend fun getTodoList(authHeader: String, perPage: Int) = all(authHeader) { delegate.getTodoList(authHeader, perPage) }
     override suspend fun getConversations(authHeader: String, perPage: Int) = all(authHeader) { delegate.getConversations(authHeader, perPage) }
     override suspend fun getActivityStream(authHeader: String, perPage: Int) = all(authHeader) { delegate.getActivityStream(authHeader, perPage) }

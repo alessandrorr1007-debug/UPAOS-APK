@@ -16,6 +16,15 @@ object NotificationService {
     const val CHANNEL_ASISTENCIA = "upaos_asistencia"
     const val CHANNEL_RECORDATORIO_CLASES = "upaos_recordatorio_clases"
 
+    private fun canNotify(context: Context, manager: NotificationManager, channel: String): Boolean {
+        val permission = Build.VERSION.SDK_INT < 33 || androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        val allowed = permission && androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+            (Build.VERSION.SDK_INT < 26 || manager.getNotificationChannel(channel)?.importance != NotificationManager.IMPORTANCE_NONE)
+        if (!allowed) SyncDiagnostics(context).delivery(channel, false)
+        return allowed
+    }
+
     private val notifIdCounter = java.util.concurrent.atomic.AtomicInteger((System.currentTimeMillis() % 100000).toInt())
 
     fun mostrarNotificacionRecordatorioClase(context: Context, id: Int, title: String, body: String) {
@@ -52,16 +61,19 @@ object NotificationService {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setContentIntent(pendingIntent)
             .build()
 
+        if (!canNotify(context, notificationManager, if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy")) return
         notificationManager.notify(id, notification)
+        SyncDiagnostics(context).delivery(if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy", true)
     }
 
-    fun mostrarNotificacionAsistencia(context: Context, title: String, body: String) {
+    fun mostrarNotificacionAsistencia(context: Context, title: String, body: String, eventId: Int? = null): Boolean {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -95,17 +107,25 @@ object NotificationService {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setContentIntent(pendingIntent)
             .build()
 
-        val id = notifIdCounter.incrementAndGet() + 1000
-        notificationManager.notify(id, notification)
+        val id = eventId ?: (notifIdCounter.incrementAndGet() + 1000)
+        if (!canNotify(context, notificationManager, if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy")) return false
+        try { notificationManager.notify(id, notification) }
+        catch (_: SecurityException) {
+            SyncDiagnostics(context).delivery(if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy", false)
+            return false
+        }
+        SyncDiagnostics(context).delivery(if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy", true)
+        return true
     }
 
-    fun mostrarNotificacionNotas(context: Context, title: String, body: String) {
+    fun mostrarNotificacionNotas(context: Context, title: String, body: String, eventId: Int? = null): Boolean {
         val notificationManager =
             context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -139,13 +159,21 @@ object NotificationService {
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(true)
             .setWhen(System.currentTimeMillis())
             .setShowWhen(true)
             .setContentIntent(pendingIntent)
             .build()
 
-        val id = notifIdCounter.incrementAndGet()
-        notificationManager.notify(id, notification)
+        val id = eventId ?: notifIdCounter.incrementAndGet()
+        if (!canNotify(context, notificationManager, if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy")) return false
+        try { notificationManager.notify(id, notification) }
+        catch (_: SecurityException) {
+            SyncDiagnostics(context).delivery(if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy", false)
+            return false
+        }
+        SyncDiagnostics(context).delivery(if (Build.VERSION.SDK_INT >= 26) notification.channelId else "legacy", true)
+        return true
     }
 }

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -44,7 +45,7 @@ import com.example.upaos.ui.components.cursoColor
 import kotlinx.coroutines.launch
 
 private enum class SettingsSection(val title: String) {
-    GENERAL("Ajustes"), PRIVACY("Privacidad y datos"), NOTIFICATIONS("Notificaciones"), HELP("Ayuda y soporte")
+    GENERAL("Ajustes"), PRIVACY("Privacidad y datos"), NOTIFICATIONS("Notificaciones"), HELP("Ayuda y soporte"), INTEGRATIONS("Integraciones")
 }
 
 private data class FrequencyOption(val preference: SyncPolicy.Preference, val title: String, val description: String)
@@ -81,11 +82,12 @@ private fun SettingsDestinationRow(
 fun SettingsScreen(
     usuario: String?,
     onBack: () -> Unit,
+    openIntegrations: Boolean = false,
     onAccountRemoved: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var section by rememberSaveable(usuario) { mutableStateOf(SettingsSection.GENERAL) }
+    var section by rememberSaveable(usuario, openIntegrations) { mutableStateOf(if (openIntegrations) SettingsSection.INTEGRATIONS else SettingsSection.GENERAL) }
     val pageScroll = key(section) { rememberScrollState() }
     fun back() {
         if (section == SettingsSection.GENERAL) onBack() else section = SettingsSection.GENERAL
@@ -317,6 +319,9 @@ fun SettingsScreen(
                 SettingsDestinationRow("Ayuda y soporte", "Preguntas y reporte de problemas", Icons.AutoMirrored.Filled.HelpOutline) {
                     section = SettingsSection.HELP
                 }
+                SettingsDestinationRow("Integraciones", "Conecta Canvas para consultar tus tareas", Icons.Filled.Link) {
+                    section = SettingsSection.INTEGRATIONS
+                }
                 Spacer(Modifier.height(14.dp))
             // Sección Seguridad y Bloqueo de la App
             AppCard(corner = 20.dp, modifier = Modifier.fillMaxWidth()) {
@@ -388,6 +393,15 @@ fun SettingsScreen(
                 }
             }
 
+                }
+                SettingsSection.INTEGRATIONS -> {
+                    if (!usuario.isNullOrBlank()) {
+                        Text("Canvas", style = MaterialTheme.typography.titleLarge)
+                        com.example.upaos.ui.canvas.CanvasSetupView(
+                            usuario = usuario,
+                            onTokenSaved = { back() }
+                        )
+                    }
                 }
                 SettingsSection.PRIVACY -> { PrivacyControls(usuario, onAccountRemoved) }
                 SettingsSection.HELP -> { HelpSupportContent() }
@@ -585,14 +599,14 @@ fun SettingsScreen(
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
                                     Text(
-                                        text = "⚡ Ahorro de batería detectado",
+                                        text = "Sincronización y batería",
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Xiaomi: activa Inicio automático y selecciona Batería > Sin restricciones para UPAO S.",
+                                        text = "Android puede aplazar revisiones durante el reposo o el ahorro de batería. Si observas retrasos, revisa los ajustes de la aplicación. No es necesario desactivar el ahorro para usar UPAO S.",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onErrorContainer,
                                         fontSize = 11.sp
@@ -602,7 +616,7 @@ fun SettingsScreen(
                                         onClick = {
                                             try {
                                                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                                    val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                                         data = android.net.Uri.parse("package:${context.packageName}")
                                                     }
                                                     context.startActivity(intent)
@@ -612,13 +626,13 @@ fun SettingsScreen(
                                                     val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                                                     context.startActivity(intent)
                                                 } catch (_: Exception) {
-                                                    Toast.makeText(context, "Abre Ajustes > Batería > UPAO S y desactiva el ahorro de batería", Toast.LENGTH_LONG).show()
+                                                    Toast.makeText(context, "Revisa Ajustes > Aplicaciones > UPAO S", Toast.LENGTH_LONG).show()
                                                 }
                                             }
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text("Desactivar ahorro de batería")
+                                        Text("Revisar ajustes de la aplicación")
                                     }
                                 }
                             }
@@ -636,6 +650,18 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )
+            val diagnosticSummary by produceState(initialValue = "", usuario) {
+                while (true) {
+                    value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val diagnostic = com.example.upaos.service.SyncDiagnostics(context)
+                        diagnostic.summary() + "\n" + diagnostic.workSummary() + "\nNotificaciones de Android: " +
+                            (if (androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()) "habilitadas" else "deshabilitadas")
+                    }
+                    kotlinx.coroutines.delay(5_000)
+                }
+            }
+            Text("Diagnóstico de sincronización", style = MaterialTheme.typography.titleSmall)
+            Text(diagnosticSummary, style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = {
                 val intent = if (android.os.Build.VERSION.SDK_INT >= 26) {
                     android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {

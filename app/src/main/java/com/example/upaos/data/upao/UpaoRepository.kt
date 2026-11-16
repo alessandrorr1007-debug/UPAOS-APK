@@ -43,6 +43,7 @@ class UpaoRepository(private val context: Context) {
         val current = Calculators.detectarPeriodoActual(periodos)
         if (current.isBlank()) throw UpaoUnexpectedFormatException("No hay periodos regulares disponibles")
         com.example.upaos.data.local.NotificationPreferences(context, currentUser).syncAcademicPeriod = current
+        com.example.upaos.data.local.NotificationPreferences(context, currentUser).academicMetadataUpdated = System.currentTimeMillis()
         PeriodosResponse(periodoActual = current, periodos = periodos.filter(Calculators::esPeriodoRegular))
     }
 
@@ -202,53 +203,40 @@ class UpaoRepository(private val context: Context) {
         usuario: String,
         mensaje: String,
         curso: String? = null,
-        componente: String? = null
+        componente: String? = null,
+        eventKey: String? = null
     ): NotificacionItem = withContext(Dispatchers.IO) {
-        val actual = getNotificaciones(usuario)
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }
         val fecha = sdf.format(Date())
-        val nuevoId = System.currentTimeMillis()
+        val nuevoId = eventKey?.let { com.example.upaos.data.local.notificationHistoryId(it) } ?: System.currentTimeMillis()
         val nuevoItem = NotificacionItem(
             id = nuevoId,
             mensaje = mensaje,
             curso = curso,
             componente = componente,
             fechaCreacion = fecha,
+            eventKey = eventKey,
             leida = false
         )
-        val nuevaLista = listOf(nuevoItem) + actual.notificaciones
-        val nuevoResponse = NotificacionesResponse(
-            noLeidas = nuevaLista.count { !it.leida },
-            total = nuevaLista.size,
-            notificaciones = nuevaLista
-        )
-        apiCache.guardar("notificaciones_$usuario", gson.toJson(nuevoResponse))
+        apiCache.actualizar("notificaciones_$usuario") { json ->
+            val previous = json?.let { gson.fromJson(it, NotificacionesResponse::class.java) } ?: NotificacionesResponse()
+            gson.toJson(com.example.upaos.data.local.insertNotification(previous, nuevoItem))
+        }
         nuevoItem
     }
 
-    suspend fun marcarNotificacionLeida(id: Long, usuario: String) = withContext(Dispatchers.IO) {
-        val actual = getNotificaciones(usuario)
-        val nuevaLista = actual.notificaciones.map {
-            if (it.id == id) it.copy(leida = true) else it
-        }
-        val nuevoResponse = NotificacionesResponse(
-            noLeidas = nuevaLista.count { !it.leida },
-            total = nuevaLista.size,
-            notificaciones = nuevaLista
-        )
-        apiCache.guardar("notificaciones_$usuario", gson.toJson(nuevoResponse))
-    }
+    suspend fun marcarNotificacionLeida(id: Long, usuario: String) = updateReadReceipts(usuario) { it.id == id }
 
-    suspend fun marcarTodasNotificacionesLeidas(usuario: String) = withContext(Dispatchers.IO) {
-        val actual = getNotificaciones(usuario)
-        val nuevaLista = actual.notificaciones.map { it.copy(leida = true) }
-        val nuevoResponse = NotificacionesResponse(
-            noLeidas = 0,
-            total = nuevaLista.size,
-            notificaciones = nuevaLista
-        )
-        apiCache.guardar("notificaciones_$usuario", gson.toJson(nuevoResponse))
+    suspend fun marcarTodasNotificacionesLeidas(usuario: String) = updateReadReceipts(usuario) { true }
+
+    private suspend fun updateReadReceipts(usuario: String, select: (NotificacionItem) -> Boolean) = withContext(Dispatchers.IO) {
+        apiCache.actualizar("notificaciones_$usuario") { json ->
+            val actual = json?.let { gson.fromJson(it, NotificacionesResponse::class.java) } ?: NotificacionesResponse()
+            val items = actual.notificaciones.map { if (select(it)) it.copy(leida = true) else it }
+            gson.toJson(NotificacionesResponse(items.count { !it.leida }, items.size, items))
+        }
+        Unit
     }
 }

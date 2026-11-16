@@ -27,21 +27,23 @@ class CanvasResourceViewModel<T>(
     val state = mutable.asStateFlow()
     private var request: Job? = null
     private var restored = false
+    private var hasData = when (initial) { null -> false; is Collection<*> -> initial.isNotEmpty(); else -> true }
     init { refresh() }
 
     fun refresh(manual: Boolean = false) {
         if (request?.isActive == true) return
         request = viewModelScope.launch(start = CoroutineStart.LAZY) {
-            mutable.value = state.value.copy(loading = !manual, refreshing = manual, error = null, failure = null)
+            mutable.value = state.value.copy(loading = !hasData && !manual, refreshing = hasData || manual, error = null, failure = null)
             try {
                 if (!restored) {
                     restored = true
-                    try { restore?.invoke()?.let { mutable.value = state.value.copy(data = it, loading = false, refreshing = true, fromCache = true, updatedAt = restoreUpdatedAt?.invoke()) } }
+                    try { restore?.invoke()?.let { hasData = true; mutable.value = state.value.copy(data = it, loading = false, refreshing = true, fromCache = true, updatedAt = restoreUpdatedAt?.invoke()) } }
                     catch (e: CancellationException) { throw e }
                     catch (_: Exception) { /* A corrupt cache must not block the live request. */ }
                 }
                 val data = canvasReadWithBackoff { repository.load() }
                 ensureActive()
+                hasData = true
                 mutable.value = state.value.copy(data = data, updatedAt = System.currentTimeMillis(), fromCache = false)
             } catch (e: CancellationException) { throw e }
             catch (e: Exception) {

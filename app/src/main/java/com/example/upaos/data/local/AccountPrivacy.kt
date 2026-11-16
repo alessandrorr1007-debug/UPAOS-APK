@@ -2,6 +2,9 @@ package com.example.upaos.data.local
 
 import android.app.NotificationManager
 import android.content.Context
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import com.example.upaos.service.AgendaReminderWorker
 import com.example.upaos.service.SyncScheduler
 import com.example.upaos.widget.ProximoCursoWidget
@@ -35,6 +38,11 @@ object AccountPrivacy {
             cancelSync = { SyncScheduler.cancel(context) },
             cancelAgenda = { AgendaReminderWorker.cancel(context, user) }
         )
+        val app = context.applicationContext
+        CoroutineScope(Dispatchers.IO).launch {
+            try { ApiCache(app).clearAgenda(user) }
+            catch (_: java.io.IOException) { android.util.Log.w("AccountPrivacy", "No se pudo limpiar la agenda local") }
+        }
         val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.activeNotifications.filter { it.tag == "agenda_$user" || (android.os.Build.VERSION.SDK_INT >= 26 && it.notification.channelId in setOf(
             com.example.upaos.service.NotificationService.CHANNEL_NOTAS,

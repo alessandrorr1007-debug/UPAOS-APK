@@ -7,11 +7,15 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.unit.dp
+
+internal val LocalUpaoDarkTheme = staticCompositionLocalOf { false }
 
 private val DarkColorScheme = darkColorScheme(
     primary = UpaoBlueLight,
@@ -109,6 +113,6 @@ fun UPAOSTheme(
         colorScheme = colorScheme,
         typography = Typography,
         shapes = UpaoShapes,
-        content = content
+        content = { CompositionLocalProvider(LocalUpaoDarkTheme provides darkTheme, content = content) }
     )
 }

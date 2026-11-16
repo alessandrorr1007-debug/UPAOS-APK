@@ -153,12 +153,14 @@ class CanvasHubViewModel(
         )
     }
 
+    private val cacheReady = kotlinx.coroutines.CompletableDeferred<Unit>()
     private var todoFetchInProgress = false
     fun fetchTodo(isManual: Boolean = false) {
         val currentToken = canvasToken.takeIf { it.isNotBlank() } ?: return
         if (todoFetchInProgress) return
         todoFetchInProgress = true
         viewModelScope.launch {
+            cacheReady.await()
             if (isManual) isRefreshingTodo = true else if (items.isEmpty()) isLoadingTodo = true
             try {
                 val previous = items
@@ -211,6 +213,7 @@ class CanvasHubViewModel(
         if (isLoadingConvs || isRefreshingConvs) return
         val currentToken = canvasToken.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
+            cacheReady.await()
             if (isManual) isRefreshingConvs = true else if (conversations.isEmpty()) isLoadingConvs = true
             try {
                 val data = canvasReadWithBackoff { repository.conversations() }
@@ -230,6 +233,7 @@ class CanvasHubViewModel(
         if (isLoadingNotifs || isRefreshingNotifs) return
         val currentToken = canvasToken.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
+            cacheReady.await()
             if (isManual) isRefreshingNotifs = true else if (notifications.isEmpty()) isLoadingNotifs = true
             try {
                 val data = canvasReadWithBackoff { repository.notifications() }
@@ -249,6 +253,7 @@ class CanvasHubViewModel(
         if (isLoadingGroups || isRefreshingGroups) return
         val currentToken = canvasToken.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
+            cacheReady.await()
             if (isManual) isRefreshingGroups = true else if (groups.isEmpty()) isLoadingGroups = true
             try {
                 val data = canvasReadWithBackoff { repository.groups() }
@@ -268,6 +273,7 @@ class CanvasHubViewModel(
         if (isLoadingCourses || isRefreshingCourses) return
         val currentToken = canvasToken.takeIf { it.isNotBlank() } ?: return
         viewModelScope.launch {
+            cacheReady.await()
             if (isManual) isRefreshingCourses = true else if (courses.isEmpty()) isLoadingCourses = true
             try {
                 val cleanCourses = canvasReadWithBackoff { repository.courses() }
@@ -319,7 +325,7 @@ class CanvasHubViewModel(
             } catch (e: kotlinx.coroutines.CancellationException) { throw e }
             catch (e: Exception) { markRefreshFailure("cache", "No se pudieron cargar algunos datos guardados de Canvas.") }
             repository.requireSession()
-            fetchCourses()
+            cacheReady.complete(Unit)
             fetchTodo()
             fetchConversations()
             fetchNotifications()

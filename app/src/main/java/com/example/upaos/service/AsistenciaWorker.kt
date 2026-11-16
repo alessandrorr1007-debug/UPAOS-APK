@@ -40,17 +40,20 @@ class AsistenciaWorker(
             throw CancellationException("La sesión del trabajo cambió")
     }
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        if (com.example.upaos.data.refresh.ForegroundRefreshGate.active) {
-            SyncScheduler.scheduleNext(applicationContext)
-            return@withContext Result.success()
-        }
+    private val diagnostics = SyncDiagnostics(applicationContext)
+
+    override suspend fun doWork(): Result = diagnostics.run("attendance", id.toString(), runAttemptCount) { performWork() }
+
+    private suspend fun performWork(): Result = withContext(Dispatchers.IO) {
         if (!syncMutex.tryLock()) {
-            SyncScheduler.scheduleNext(applicationContext)
-            return@withContext Result.success()
+            diagnostics.skipped("attendance", "busy_retry")
+            return@withContext Result.retry()
         }
         try {
-            if (!tokenManager.shouldKeepLoggedIn()) return@withContext Result.success()
+            if (!tokenManager.shouldKeepLoggedIn()) {
+                diagnostics.skipped("attendance", "no_saved_session")
+                return@withContext Result.success()
+            }
             val checkAsistencia = notificationPrefs.checkAsistenciaEnabled
             val checkNotas = notificationPrefs.checkNotasEnabled
 
@@ -68,6 +71,7 @@ class AsistenciaWorker(
             val pass = tokenManager.getSavedPass()
 
             if (user.isNullOrBlank() || pass.isNullOrBlank()) {
+                diagnostics.skipped("attendance", "missing_credentials")
                 Log.d(TAG, "Sin credenciales guardadas, omitiendo chequeo.")
                 return@withContext Result.success()
             }
@@ -75,11 +79,16 @@ class AsistenciaWorker(
             owner = ReminderOwner(user, sessionId)
             requireCurrentSession()
             notificationPrefs = NotificationPreferences(applicationContext, user)
+            if (!inputData.getBoolean("manual", false) && System.currentTimeMillis() < notificationPrefs.nextAttendanceAttempt) {
+                diagnostics.skipped("attendance", "pending_adaptive_deadline")
+                return@withContext Result.success()
+            }
 
             try {
                 // Asegurar sesión directa en UPAO SSO
                 val loginRes = UpaoAuth.ensureSession(user, pass)
                 if (!loginRes.success) {
+                    diagnostics.error("attendance", com.example.upaos.data.upao.UpaoSessionExpiredException())
                     Log.w(TAG, "No se pudo asegurar sesión directa con UPAO SSO.")
                     val fallos = notificationPrefs.syncConsecutiveFailures + 1
                     publishForCurrentSession {
@@ -100,11 +109,13 @@ class AsistenciaWorker(
                     notificationPrefs.syncConsecutiveFailures = 0
                     SyncScheduler.scheduleNext(applicationContext, fallosConsecutivos = 0)
                 }
+                diagnostics.success("attendance")
                 Log.d(TAG, "Sincronización en segundo plano completada con éxito. Próximo ciclo adaptativo programado.")
                 Result.success()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 requireCurrentSession()
+                diagnostics.error("attendance", e)
                 Log.e(TAG, "No se pudo completar la sincronización")
                 publishForCurrentSession {
                     val fallos = notificationPrefs.syncConsecutiveFailures + 1
@@ -181,26 +192,40 @@ class AsistenciaWorker(
                         val plural = if (dif == 1) "una nueva falta" else "$dif faltas nuevas"
                         val titulo = "⚠️ Falta registrada"
                         val mensaje = "Te registraron $plural (Total: $faltasActuales). Asistencia: ${formatearPct(pctActual)}%."
-                        publishForCurrentSession { NotificationService.mostrarNotificacionAsistencia(applicationContext, titulo, mensaje) }
-                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = nombreConTipo, componente = "Asistencia")
+                        var eventKey: String? = null
+                        publishForCurrentSession { eventKey = emitAttendance(user, key, titulo, mensaje) }
+                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = nombreConTipo, componente = "Asistencia", eventKey = eventKey)
                     } else if (asistenciasActuales != null && asistPrevias != null && asistenciasActuales > asistPrevias) {
                         val dif = asistenciasActuales - asistPrevias
                         val plural = if (dif == 1) "asistencia" else "$dif asistencias"
                         val titulo = "✅ Asistencia registrada"
                         val mensaje = "¡Se registró tu $plural! Llevas $asistenciasActuales asistencias."
-                        publishForCurrentSession { NotificationService.mostrarNotificacionAsistencia(applicationContext, titulo, mensaje) }
-                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = nombreConTipo, componente = "Asistencia")
+                        var eventKey: String? = null
+                        publishForCurrentSession { eventKey = emitAttendance(user, key, titulo, mensaje) }
+                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = nombreConTipo, componente = "Asistencia", eventKey = eventKey)
                     } else if (previo.porcentaje != null && pctActual > previo.porcentaje && faltasActuales == faltasPrevias) {
                         val titulo = "✅ Asistencia registrada"
                         val mensaje = "¡Se registró una nueva asistencia! (${formatearPct(pctActual)}%)."
-                        publishForCurrentSession { NotificationService.mostrarNotificacionAsistencia(applicationContext, titulo, mensaje) }
-                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = nombreConTipo, componente = "Asistencia")
+                        var eventKey: String? = null
+                        publishForCurrentSession { eventKey = emitAttendance(user, key, titulo, mensaje) }
+                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = nombreConTipo, componente = "Asistencia", eventKey = eventKey)
                     }
                 }
             }
         }
 
-        notificationPrefs.ultimoSnapshotAsistencia = gson.toJson(nuevoSnapshot)
+        publishForCurrentSession { notificationPrefs.commitAttendanceSnapshot(gson.toJson(nuevoSnapshot)) }
+    }
+
+    private fun emitAttendance(user: String, courseKey: String, title: String, body: String): String {
+        val prefs = applicationContext.getSharedPreferences("upaos_notification_snapshots_$user", Context.MODE_PRIVATE)
+        val fingerprint = com.example.upaos.data.local.notificationEventKey(user, "attendance",
+            notificationPrefs.syncAcademicPeriod, notificationPrefs.attendanceSnapshotGeneration, "$courseKey/$title/$body")
+        diagnostics.detected(fingerprint)
+        if (prefs.contains("attendance_notified_$fingerprint")) return fingerprint
+        if (!NotificationService.mostrarNotificacionAsistencia(applicationContext, title, body, fingerprint.hashCode())) return fingerprint
+        check(prefs.edit().putBoolean("attendance_notified_$fingerprint", true).commit()) { "No se pudo persistir dedupe" }
+        return fingerprint
     }
 
     private fun formatearPct(pct: Double): String =

@@ -94,6 +94,9 @@ class CanvasNativeIntegrationTest {
         vm.send { calls++ }; runCurrent(); assertEquals(2, calls)
     }
     @Test fun nativeRoutingDoesNotCaptureDeliveryOrForeignOrigins() {
+        assertTrue(canvasIsSubmissionUrl("/courses/1/assignments/2/submissions/new"))
+        assertFalse(canvasIsSubmissionUrl("/courses/1/pages/submissions-info"))
+        assertFalse(canvasIsSubmissionUrl("https://evil.test/courses/1/assignments/2/submissions/new"))
         assertEquals("pages", canvasNativeRoute("/courses/1/pages/synthetic")!!.kind)
         assertEquals(2L, canvasNativeRoute("https://upao.instructure.com/courses/2/files/3/download")!!.course)
         assertNull(canvasNativeRoute("https://evil.test/courses/1/pages/synthetic"))

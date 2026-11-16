@@ -38,7 +38,8 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
         var outcome = "error"
         try {
             requireCurrentSession()
-            if (notificationPrefs.syncAcademicPeriod == null) upaoRepository.getPeriodos()
+            val metadataAge = System.currentTimeMillis() - notificationPrefs.academicMetadataUpdated
+            if (notificationPrefs.syncAcademicPeriod == null || metadataAge !in 0..86_400_000L) upaoRepository.getPeriodos()
             revisarNotas(user).requireComplete()
             outcome = "ok"
         } finally {
@@ -58,7 +59,8 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
         publishComplete(upaoRepository.buscarNotasResult(periodo, carrera)) { grades ->
             currentCoroutineContext().ensureActive()
             requireCurrentSession()
-            compararYNotificarNotas(grades.cursos, user)
+            compararYNotificarNotas(grades.cursos, user,
+                (notificationPrefs.gradeSnapshotPeriod ?: cached?.periodo) == periodo)
             gradesCache.guardar("notas_$user", gson.toJson(grades))
             notificationPrefs.ultimaRevisionNotas = System.currentTimeMillis()
         }
@@ -68,13 +70,16 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
         Unit
     }
 
-    private fun emitGrade(title: String, body: String, identity: String) {
+    private fun emitGrade(title: String, body: String, identity: String): String {
         val prefs = applicationContext.getSharedPreferences("upaos_notification_snapshots_$user", Context.MODE_PRIVATE)
-        val fingerprint = java.security.MessageDigest.getInstance("SHA-256").digest("${notificationPrefs.syncAcademicPeriod}/$identity".toByteArray()).joinToString("") { "%02x".format(it) }
-        if (prefs.contains("grade_notified_$fingerprint")) return
-        NotificationService.mostrarNotificacionNotas(applicationContext, title, body)
+        val fingerprint = com.example.upaos.data.local.notificationEventKey(user, "grades",
+            notificationPrefs.syncAcademicPeriod, notificationPrefs.gradeSnapshotGeneration, identity)
+        SyncDiagnostics(applicationContext).detected(fingerprint)
+        if (prefs.contains("grade_notified_$fingerprint")) return fingerprint
+        if (!NotificationService.mostrarNotificacionNotas(applicationContext, title, body, fingerprint.hashCode())) return fingerprint
         kotlin.check(prefs.edit().putBoolean("grade_notified_$fingerprint", true).commit()) { "No se pudo persistir dedupe" }
         changes++
+        return fingerprint
     }
 
     private fun limpiarNota(v: Any?): String? {
@@ -100,8 +105,8 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
         }
     }
 
-    private suspend fun compararYNotificarNotas(nuevosCursos: List<CourseGrade>, user: String) {
-        val snapshotPrevioRaw = notificationPrefs.ultimoSnapshotNotas
+    private suspend fun compararYNotificarNotas(nuevosCursos: List<CourseGrade>, user: String, samePeriod: Boolean) {
+        val snapshotPrevioRaw = notificationPrefs.ultimoSnapshotNotas.takeIf { samePeriod }
         val type = object : TypeToken<Map<String, SnapshotNotasCurso>>() {}.type
         val snapshotPrevio: Map<String, SnapshotNotasCurso> = if (!snapshotPrevioRaw.isNullOrBlank()) {
             try {
@@ -197,8 +202,9 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
                                     "Tu nota en $detalleSub cambió de $notaPreviaSub a $notaActualSub."
                                 }
 
-                                publishForCurrentSession { emitGrade(titulo, mensaje, "$key/sub/$subKey/$notaActualSub") }
-                                upaoRepository.registrarNotificacionLocal(user, mensaje, curso = cursoNombre, componente = etiqueta)
+                                var eventKey: String? = null
+                                publishForCurrentSession { eventKey = emitGrade(titulo, mensaje, "$key/sub/$subKey/$notaActualSub") }
+                                upaoRepository.registrarNotificacionLocal(user, mensaje, curso = cursoNombre, componente = etiqueta, eventKey = eventKey)
                             }
                         }
                     }
@@ -224,8 +230,9 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
                                 } else {
                                     "Tu nota en $compNombre cambió de $notaPreviaComp a $notaActualComp."
                                 }
-                                publishForCurrentSession { emitGrade(titulo, mensaje, "$key/comp/$compKey/$notaActualComp") }
-                                upaoRepository.registrarNotificacionLocal(user, mensaje, curso = cursoNombre, componente = compNombre)
+                                var eventKey: String? = null
+                                publishForCurrentSession { eventKey = emitGrade(titulo, mensaje, "$key/comp/$compKey/$notaActualComp") }
+                                upaoRepository.registrarNotificacionLocal(user, mensaje, curso = cursoNombre, componente = compNombre, eventKey = eventKey)
                             }
                         }
                     }
@@ -234,14 +241,15 @@ internal class GradeSyncCheck(private val applicationContext: Context) {
                     if (!notaActualStr.isNullOrBlank() && notaActualStr != previo.notaActual && !algunSubNotificado && !algunCompNotificado) {
                         val titulo = "🎓 Nota promedio actualizada"
                         val mensaje = "$cursoNombre: Tu promedio actual ahora es $notaActualStr."
-                        publishForCurrentSession { emitGrade(titulo, mensaje, "$key/average/$notaActualStr") }
-                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = cursoNombre, componente = "Promedio Actual")
+                        var eventKey: String? = null
+                        publishForCurrentSession { eventKey = emitGrade(titulo, mensaje, "$key/average/$notaActualStr") }
+                        upaoRepository.registrarNotificacionLocal(user, mensaje, curso = cursoNombre, componente = "Promedio Actual", eventKey = eventKey)
                     }
                 }
             }
         }
 
-        notificationPrefs.ultimoSnapshotNotas = gson.toJson(nuevoSnapshot)
+        publishForCurrentSession { notificationPrefs.commitGradeSnapshot(gson.toJson(nuevoSnapshot)) }
     }
 
     private data class SnapshotNotasCurso(

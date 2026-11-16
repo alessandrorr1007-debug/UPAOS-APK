@@ -1,12 +1,16 @@
 package com.example.upaos.ui.canvas
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Refresh
+import com.example.upaos.ui.components.RefreshableContent
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.upaos.data.model.*
@@ -48,27 +52,38 @@ internal fun CanvasComposer(flow: String, token: String, label: String = "Respue
 internal fun CanvasNativeInbox(token: String, courses: List<CanvasCourse>, open: (CanvasConversation) -> Unit) {
     var scope by remember { mutableStateOf("inbox") }
     var compose by remember { mutableStateOf(false) }
-    var search by remember { mutableStateOf("") }
     val vm = canvasResourceViewModel("inbox:$scope", token, emptyList<CanvasConversation>()) { inbox(scope) }
     val state by vm.state.collectAsState()
-    CanvasResourceFeedback(state) { vm.refresh(true) }
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
-        ScrollableTabRow(listOf("inbox", "sent", "unread", "archived").indexOf(scope)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 12.dp)) {
+        ScrollableTabRow(listOf("inbox", "sent", "unread", "archived").indexOf(scope), edgePadding = 0.dp) {
             listOf("inbox" to "Entrada", "sent" to "Enviados", "unread" to "No leídos", "archived" to "Archivados").forEach { (id, text) ->
                 Tab(scope == id, onClick = { scope = id }, text = { Text(text) })
             }
         }
-        Row { TextButton(onClick = { compose = true }, enabled = courses.isNotEmpty()) { Text("Nuevo mensaje") }
-            TextButton(onClick = { vm.refresh(true) }) { Text("Actualizar") } }
-        OutlinedTextField(search, { search = it }, label = { Text("Buscar conversación") }, modifier = Modifier.fillMaxWidth())
-        if (state.loading || state.refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
-        LazyColumn {
-            items(state.data.filter { search.isBlank() || listOfNotNull(it.subject, it.lastMessage, it.contextName).any { s -> s.contains(search, true) } }, key = { it.id }) { conversation ->
-                ListItem(headlineContent = { Text(conversation.subject ?: "Sin asunto") },
-                    supportingContent = { Text(listOfNotNull(conversation.contextName, conversation.lastMessage).joinToString(" · ")) },
-                    overlineContent = { if (conversation.isUnread) Text("No leído") }, modifier = Modifier.clickable { open(conversation) })
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+            FilledTonalButton(onClick = { compose = true }, enabled = courses.isNotEmpty()) {
+                Icon(Icons.Filled.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Nuevo mensaje")
             }
-            if (!state.loading && state.data.isEmpty()) item { Text("Sin conversaciones en esta bandeja") }
+            IconButton(onClick = { vm.refresh(true) }, enabled = !state.loading && !state.refreshing) {
+                Icon(Icons.Filled.Refresh, contentDescription = "Actualizar mensajes")
+            }
+        }
+        CanvasResourceFeedback(state) { vm.refresh(true) }
+        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        RefreshableContent(state.refreshing, { vm.refresh(true) }, Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(state.data, key = { it.id }) { conversation ->
+                    CanvasConversationCard(conversation) { open(conversation) }
+                }
+                if (!state.loading && state.data.isEmpty()) item {
+                    Text("Sin conversaciones en esta bandeja", style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 16.dp))
+                }
+            }
         }
     }
     if (compose) CanvasNewMessage(token, courses, { compose = false }) { vm.refresh(true) }

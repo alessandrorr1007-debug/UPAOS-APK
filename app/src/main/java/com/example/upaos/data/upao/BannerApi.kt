@@ -61,6 +61,7 @@ class BannerApi(private val context: Context) {
             if (isSessionExpired(response)) {
                 response.close()
                 val user = accountUser
+                if (tokenManager.getSavedUser() != accountUser) throw kotlinx.coroutines.CancellationException("La cuenta cambió")
                 val pass = tokenManager.getSavedPass()
 
                 if (!user.isNullOrBlank() && !pass.isNullOrBlank()) {

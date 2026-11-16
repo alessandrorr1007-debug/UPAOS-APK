@@ -3,7 +3,7 @@
 [![Android](https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://www.android.com/)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20M3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
-[![Web Netlify](https://img.shields.io/badge/Web%20Oficial-Netlify-00C7B7?style=for-the-badge&logo=netlify&logoColor=white)](https://upaos.netlify.app/)
+[![Web Netlify](https://img.shields.io/badge/Web%20Oficial-Netlify-00C7B7?style=for-the-badge&logo=netlify&logoColor=white)](https://upao.netlify.app/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 **UPAO S** es la aplicación móvil integral y de alto rendimiento diseñada para la comunidad estudiantil de la **Universidad Privada Antenor Orrego (UPAO)**. Desarrollada 100% en Kotlin con **Jetpack Compose y Material Design 3**, conecta de forma directa y optimizada con los servicios institucionales (**Banner UPAO** y **Canvas LMS**), ofreciendo una experiencia moderna, fluida y segura.
@@ -14,10 +14,10 @@
 
 La forma principal y oficial para descargar la aplicación, ver novedades y obtener el archivo APK actualizado es a través de nuestra web alojada en **Netlify**:
 
-👉 **[Entrar a la Web Oficial de UPAO S en Netlify (Descargar APK)](https://upaos.netlify.app/)**
+👉 **[Entrar a la Web Oficial de UPAO S en Netlify (Descargar APK)](https://upao.netlify.app/)**
 
 ### Pasos para instalar:
-1. Ingresa a **[upaos.netlify.app](https://upaos.netlify.app/)** desde tu celular Android.
+1. Ingresa a **[upao.netlify.app](https://upao.netlify.app/)** desde tu celular Android.
 2. Pulsa en el botón **Descargar APK**.
 3. Una vez finalizada la descarga, abre el archivo `.apk` e instálalo (o actualízalo si ya cuentas con una versión anterior).
 
@@ -74,7 +74,7 @@ La forma principal y oficial para descargar la aplicación, ver novedades y obte
 | **Persistencia y Seguridad** | Jetpack DataStore Preferences, EncryptedSharedPreferences (`SecureStore`), BiometricPrompt |
 | **Tareas en Background** | Android WorkManager (Background sync periódico y adaptable) |
 | **Compatibilidad** | `minSdk 24` (Android 7.0 Nougat+) \| `compileSdk / targetSdk 37` |
-| **Hosting Web** | [Netlify](https://upaos.netlify.app/) (Landing page y distribución del APK) |
+| **Hosting Web** | [Netlify](https://upao.netlify.app/) (Landing page y distribución del APK) |
 
 ---
 

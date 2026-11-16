@@ -110,7 +110,7 @@ fun CanvasCourseDetailView(
     var moduleQuiz by remember(course.id) { mutableStateOf<Long?>(null) }
     moduleQuiz?.let { CanvasLinkedResource(CanvasNativeRoute(course.id, "quizzes", it.toString()), token) { moduleQuiz = null } }
     var moduleAssignment by remember(course.id) { mutableStateOf<Long?>(null) }
-    val tabsVm = canvasResourceViewModel("navigation:${course.id}", token, emptyList<CanvasTab>()) { tabs(course.id) }
+    val tabsVm = canvasCachedList("navigation:${course.id}", token, CanvasTab::class.java) { tabs(course.id) }
     val tabsState by tabsVm.state.collectAsState()
     val visibleTabs = canvasVisibleTabs(tabsState.data)
     var moduleDiscussion by remember(course.id) { mutableStateOf<Long?>(null) }
@@ -143,7 +143,6 @@ fun CanvasCourseDetailView(
             Triple(6, "Archivos", Icons.AutoMirrored.Filled.InsertDriveFile),
             Triple(7, "Programa de curso", Icons.Filled.Description),
             Triple(8, "Zoom", Icons.Filled.Videocam),
-            Triple(9, "Anuncios", Icons.Filled.Info),
             Triple(10, "Páginas", Icons.Filled.Description),
             Triple(11, "Quizzes", Icons.Filled.Quiz),
             Triple(12, "Carpetas", Icons.Filled.Folder),
@@ -246,11 +245,8 @@ fun CanvasCourseDetailView(
                 0 -> CourseHomeSection(
                     course = course,
                     token = token,
-                    courseColor = courseAccentColor,
                     todoItems = todoItems,
                     notifications = notifications,
-                    onNavigateToSection = { selectedSection = it },
-                    allowedSections = sections.map { it.first }.toSet(),
                     onOpenAssignment = onOpenAssignment,
                     onOpenUrl = onOpenUrl
                 )
@@ -268,8 +264,9 @@ fun CanvasCourseDetailView(
                             moduleQuiz = item.contentId
                         } else if (item.isFile) {
                             onOpenFile(item, modName)
-                        } else if (!item.htmlUrl.isNullOrBlank()) {
-                            onOpenUrl(item.htmlUrl, item.title ?: "Módulo")
+                        } else {
+                            val url = item.externalUrl ?: item.htmlUrl ?: item.url
+                            if (!url.isNullOrBlank()) onOpenUrl(url, item.title ?: "Módulo")
                         }
                     }
                 )
@@ -311,7 +308,6 @@ fun CanvasCourseDetailView(
                     token = token,
                     onOpenUrl = onOpenUrl
                 )
-                9 -> CanvasAnnouncements(token, listOf(course.id))
                 10 -> CanvasPages(course.id, token)
                 11 -> CanvasQuizzes(course.id, token)
                 12 -> CanvasFolders(course.id, token)
@@ -329,11 +325,8 @@ fun CanvasCourseDetailView(
 private fun CourseHomeSection(
     course: CanvasCourse,
     token: String,
-    courseColor: Color,
     todoItems: List<CanvasTodoItem>,
     notifications: List<CanvasNotificationItem>,
-    onNavigateToSection: (Int) -> Unit,
-    allowedSections: Set<Int>,
     onOpenAssignment: (CanvasTodoItem) -> Unit,
     onOpenUrl: (String, String) -> Unit
 ) {
@@ -353,163 +346,14 @@ private fun CourseHomeSection(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // Banner Hero del Curso
-        item {
-            AppCard(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentPadding = PaddingValues(16.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = courseColor.copy(alpha = 0.15f),
-                        modifier = Modifier.size(48.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.School,
-                                contentDescription = null,
-                                tint = courseColor,
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = course.displayTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${course.courseCode ?: "UPAO"} • ${course.term?.name ?: "Periodo no informado"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
         if (homePage != null) item {
             CanvasResourceFeedback(homePage) { frontPage?.refresh(true) }
             homePage.data.firstOrNull()?.let { page ->
                 Text(page.title ?: "Inicio del curso", style = MaterialTheme.typography.titleMedium)
                 HtmlText(page.body.orEmpty())
-            }
-        }
-
-        // Acceso directo a Clase Virtual Zoom
-        item {
-            AppCard(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF2D8CFF).copy(alpha = 0.10f),
-                contentPadding = PaddingValues(14.dp),
-                onClick = { onNavigateToSection(8) }
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xFF2D8CFF),
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Videocam,
-                                contentDescription = "Zoom",
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Clase Virtual (Zoom)",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Ver enlace, unirse a la reunión o ingresar ID",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = Color(0xFF2D8CFF),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
-
-        // Accesos rápidos a secciones
-        item {
-            Text(
-                text = "Secciones del curso",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            val quickActions = listOf(
-                Triple("Módulos", Icons.Filled.Folder, 1),
-                Triple("Personas", Icons.Filled.Person, 2),
-                Triple("Grupos", Icons.Filled.Groups, 3),
-                Triple("Calificaciones", Icons.Filled.Star, 4),
-                Triple("Foro de discusión", Icons.Filled.Forum, 5),
-                Triple("Archivos", Icons.AutoMirrored.Filled.InsertDriveFile, 6),
-                Triple("Programa de curso", Icons.Filled.Description, 7),
-                Triple("Zoom", Icons.Filled.Videocam, 8)
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                quickActions.filter { it.third in allowedSections }.chunked(2).forEach { rowItems ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowItems.forEach { (label, icon, sectionIdx) ->
-                            AppCard(
-                                modifier = Modifier.weight(1f),
-                                contentPadding = PaddingValues(10.dp),
-                                onClick = { onNavigateToSection(sectionIdx) }
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = label,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
 
@@ -885,7 +729,7 @@ private fun CourseGroupsSection(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         if (isLoadingGroups) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1003,7 +847,7 @@ private fun CourseDiscussionsSection(
     token: String,
     onOpenTopic: (CanvasDiscussionTopic) -> Unit
 ) {
-    val resource = canvasResourceViewModel("topics:${courseId}", token, emptyList<CanvasDiscussionTopic>()) { discussions(courseId) }
+    val resource = canvasCachedList("topics:${courseId}", token, CanvasDiscussionTopic::class.java) { discussions(courseId) }
     val resourceState by resource.state.collectAsState()
     CanvasResourceFeedback(resourceState) { resource.refresh(true) }
     val topics = resourceState.data
@@ -1022,6 +866,9 @@ private fun CourseDiscussionsSection(
                 .fillMaxSize()
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
+            if (resourceState.fromCache) Text(
+                "Datos guardados · " + (resourceState.updatedAt?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) } ?: "fecha no disponible"),
+                style = MaterialTheme.typography.labelSmall)
             when {
                 isLoading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1116,7 +963,7 @@ private fun CourseFilesSection(
     token: String,
     onOpenFile: (CanvasFileDetail) -> Unit
 ) {
-    val resource = canvasResourceViewModel("files:${courseId}", token, emptyList<CanvasFileDetail>()) { files(courseId) }
+    val resource = canvasCachedList("files:${courseId}", token, CanvasFileDetail::class.java) { files(courseId) }
     val resourceState by resource.state.collectAsState()
     CanvasResourceFeedback(resourceState) { resource.refresh(true) }
     val files = resourceState.data
@@ -1136,6 +983,9 @@ private fun CourseFilesSection(
                 .fillMaxSize()
                 .padding(horizontal = 14.dp, vertical = 8.dp)
         ) {
+            if (resourceState.fromCache) Text(
+                "Datos guardados · " + (resourceState.updatedAt?.let { java.text.DateFormat.getDateTimeInstance().format(java.util.Date(it)) } ?: "fecha no disponible"),
+                style = MaterialTheme.typography.labelSmall)
             // Buscador de archivos
             ModernTextField(
                 value = searchQuery,
@@ -1255,7 +1105,7 @@ private fun CourseSyllabusSection(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
@@ -1348,63 +1198,48 @@ fun CanvasCourseCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Icono con color característico del curso
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = accentColor.copy(alpha = 0.15f),
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(36.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Filled.School,
                         contentDescription = null,
                         tint = accentColor,
-                        modifier = Modifier.size(26.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(14.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = toTitleCase(course.displayTitle),
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
+                    minLines = 2,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = course.courseCode ?: "UPAO",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (!course.nrcNumber.isNullOrBlank()) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = accentColor.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text = "NRC ${course.nrcNumber}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = accentColor,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
-                            )
-                        }
-                    }
-                }
+                Text(
+                    text = listOfNotNull(course.courseCode ?: "UPAO",
+                        course.nrcNumber?.let { "NRC $it" }).joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -1490,7 +1325,7 @@ fun CourseZoomSection(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         // Banner Superior Zoom
         AppCard(

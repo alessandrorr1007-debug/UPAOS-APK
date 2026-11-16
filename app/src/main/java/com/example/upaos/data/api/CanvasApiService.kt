@@ -98,7 +98,8 @@ interface CanvasApiService {
         @Header("Authorization") authHeader: String,
         @Query("enrollment_state") state: String = "active",
         @Query("per_page") perPage: Int = 100,
-        @Query("page") page: Int = 1
+        @Query("page") page: Int = 1,
+        @Query("enrollment_type") enrollmentType: String? = null
     ): Response<List<CanvasCourse>>
 
     @GET("api/v1/conversations")
@@ -134,7 +135,7 @@ interface CanvasApiService {
         @Path("fileId") fileId: Long
     ): Response<CanvasFileDetail>
 
-    @GET("api/v1/courses/{courseId}/assignments?include[]=submission&include[]=all_dates&include[]=overrides")
+    @GET("api/v1/courses/{courseId}/assignments?include[]=submission&include[]=all_dates&include[]=overrides&override_assignment_dates=true")
     suspend fun getCourseAssignments(
         @Header("Authorization") authHeader: String,
         @Path("courseId") courseId: Long,

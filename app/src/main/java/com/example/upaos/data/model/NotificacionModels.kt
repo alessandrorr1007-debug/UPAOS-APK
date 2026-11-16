@@ -8,7 +8,8 @@ data class NotificacionItem(
     @SerializedName("curso") val curso: String? = null,
     @SerializedName("componente") val componente: String? = null,
     @SerializedName("fecha_creacion") val fechaCreacion: String? = null,
-    @SerializedName("leida") val leida: Boolean = false
+    @SerializedName("leida") val leida: Boolean = false,
+    @SerializedName("event_key") val eventKey: String? = null
 )
 
 data class NotificacionesResponse(

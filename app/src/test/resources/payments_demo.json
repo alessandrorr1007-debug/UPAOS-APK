@@ -1,0 +1,47 @@
+{
+  "getBalanceAndConfigInfo": {
+    "hasData": true, "totalBalance": 350.00, "totalBalanceDisplay": "S/ 350.00",
+    "currentAmountDue": 150.00, "currentAmountDueDisplay": "S/ 150.00",
+    "asOfDate": "15/09/2026", "hasAsOfDate": true, "hasTransactions": true,
+    "showBalance": true, "showCurrentAmountDue": true, "currency": "PEN", "data": {}
+  },
+  "getMyTermsAndTotals": {
+    "success": true,
+    "termsTotals": [
+      {"termCode": "DEMO-B", "termDescription": "2026-II", "termTotalBalance": 350.00, "totalBalanceDisplay": "S/ 350.00", "cannotExpand": false, "clickable": true, "id": 2},
+      {"termCode": "DEMO-A", "termDescription": "2026-I", "termTotalBalance": 0, "totalBalanceDisplay": "S/ 0.00", "cannotExpand": false, "clickable": true, "id": 1}
+    ]
+  },
+  "getMyTerms": {
+    "success": true, "length": 3,
+    "dropDown": [
+      {"key": "DEMO-ALL", "value": "Todos los periodos", "id": 0},
+      {"key": "DEMO-B", "value": "2026-II", "startDate": "2026-08-01", "endDate": "2026-12-31", "id": 2},
+      {"key": "DEMO-A", "value": "2026-I", "startDate": "2026-03-01", "endDate": "2026-07-31", "id": 1}
+    ]
+  },
+  "getHoldCount": {"noHolds": "Sin retenciones", "count": 0},
+  "listForUIForStudent": {
+    "success": true, "isMultiCurrencyEnabled": false, "hasTransactions": true,
+    "result": [{"key": "PEN", "value": "Sol peruano", "iso": "PEN", "isBase": true}]
+  },
+  "fetchAccountSummaryByTerm": {
+    "DEMO-ALL": {
+      "success": true, "length": 2,
+      "result": [
+        {"detailCode": "DEMO-CARGO", "description": "Cuota de enseñanza", "charge": 500.00, "chargeDisplay": "S/ 500.00", "balance": 500.00, "balanceDisplay": "S/ 500.00", "date": "01/09/2026", "studyPathName": "Programa de demostración"},
+        {"detailCode": "DEMO-PAGO", "description": "Abono", "payment": 150.00, "paymentDisplay": "S/ 150.00", "balance": 350.00, "balanceDisplay": "S/ 350.00"}
+      ],
+      "totals": {"totalchargeDisplay": "S/ 500.00", "totalpaymentDisplay": "S/ 150.00", "totalbalanceDisplay": "S/ 350.00"}
+    },
+    "DEMO-B": {
+      "success": true, "length": 2,
+      "result": [
+        {"detailCode": "DEMO-CARGO", "description": "Cuota de enseñanza", "chargeDisplay": "S/ 500.00", "balanceDisplay": "S/ 500.00", "date": "01/09/2026"},
+        {"detailCode": "DEMO-PAGO", "description": "Abono", "paymentDisplay": "S/ 150.00", "balanceDisplay": "S/ 350.00"}
+      ],
+      "totals": {"totalchargeDisplay": "S/ 500.00", "totalpaymentDisplay": "S/ 150.00", "totalbalanceDisplay": "S/ 350.00"}
+    },
+    "DEMO-A": {"success": true, "length": 0, "result": []}
+  }
+}

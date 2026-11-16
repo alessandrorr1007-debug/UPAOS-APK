@@ -5,8 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.upaos.data.agenda.AgendaItem
-import com.example.upaos.data.agenda.AgendaRepository
 import com.example.upaos.data.local.ApiCache
 import com.example.upaos.data.local.GradesCache
 import com.example.upaos.data.model.*
@@ -37,7 +35,6 @@ data class DashboardState(
     val attendance: AsistenciaResponse? = null,
     val week: SemanaInfo? = null,
     val notices: NotificacionesResponse? = null,
-    val agenda: List<AgendaItem> = emptyList(),
     val times: Map<String, Long?> = emptyMap(),
     val fresh: Set<String> = emptySet(),
     val errors: Map<String, String> = emptyMap(),
@@ -47,15 +44,16 @@ data class DashboardState(
 class DashboardViewModel(app: Application, private val token: String, private val user: String) : AndroidViewModel(app) {
     private val cache = ApiCache(app)
     private val gradesCache = GradesCache(app)
-    private val agendaRepository = AgendaRepository(app)
     private val upaoRepository = com.example.upaos.data.upao.UpaoRepository(app)
     private val gson = Gson()
     private val mutable = MutableStateFlow(DashboardState())
     val state = mutable.asStateFlow()
     private var loaded = false
+    // Disk restoration must never queue behind a worker's network round.
     private var gradeChosen = false
     private var scheduleChosen = false
     private var attendanceChosen = false
+    private val variantTimes = mutableMapOf<Pair<String, String>, Long?>()
     private val gradeVariants = mutableMapOf<Pair<String, String>, GradesResponse>()
     private val averages = mutableMapOf<Pair<String, String>, PromedioPeriodoResponse>()
     private val projections = mutableMapOf<Pair<String, String>, Map<String, Any?>>()
@@ -71,6 +69,7 @@ class DashboardViewModel(app: Application, private val token: String, private va
     val gradeCacheKey get() = "notas_$user"
     val attendanceCacheKey get() = "asistencia_$user"
     fun scheduleCacheKey(term: String) = "horario_${user}_$term"
+    private val cacheReady = viewModelScope.launch { loadCache() }
 
     fun setForeground(active: Boolean) {
         ForegroundRefreshGate.active = active
@@ -91,6 +90,7 @@ class DashboardViewModel(app: Application, private val token: String, private va
             career = level,
             grades = gradeVariants[term to level],
             average = averages[term to level],
+            times = state.value.times + (gradeCacheKey to variantTimes[term to level]),
             projected = projections[term to level] ?: emptyMap()
         )
         if (state.value.grades == null || term !in state.value.schedules) refreshSelection()
@@ -109,15 +109,21 @@ class DashboardViewModel(app: Application, private val token: String, private va
             val version = selectionVersion
             val term = state.value.gradePeriod
             val level = state.value.career
-            if (state.value.grades == null && term != state.value.currentPeriod) {
+            cacheReady.join()
+            if (state.value.grades == null) {
                 try {
-                    cache.cargar("notas_${user}_$term")?.let { gson.fromJson(it, GradesResponse::class.java) }?.let { historical ->
+                    val key = com.example.upaos.data.local.gradeVariantKey(user, term, level)
+                    val historical = com.example.upaos.data.local.restoreGradeVariant(cache.cargar(key), term, level)
+                        ?: com.example.upaos.data.local.restoreGradeVariant(cache.cargar("notas_${user}_$term"), term, level)
+                    historical?.let { historical ->
                         gradeVariants[term to level] = historical
-                        if (state.value.gradePeriod == term) {
-                            mutable.value = state.value.copy(grades = historical)
+                        variantTimes[term to level] = cache.actualizado(key) ?: cache.actualizado("notas_${user}_$term")
+                        if (selectionVersion == version && state.value.gradePeriod == term && state.value.career == level) {
+                            mutable.value = state.value.copy(grades = historical,
+                                times = state.value.times + (gradeCacheKey to variantTimes[term to level]))
                         }
                     }
-                } catch (_: Exception) {}
+                } catch (e: CancellationException) { throw e } catch (_: Exception) {}
             }
             loop.requestRefresh().join()
             // A user selection made during a round is handled once, centrally, after that round.
@@ -132,6 +138,7 @@ class DashboardViewModel(app: Application, private val token: String, private va
 
     private suspend fun loadCache() {
         if (loaded) return
+        val cacheStarted = android.os.SystemClock.elapsedRealtime()
         val savedGrades = try { gradesCache.cargar(gradeCacheKey)?.let { gson.fromJson(it, GradesResponse::class.java) } }
             catch (e: CancellationException) { throw e } catch (_: Exception) { null }
         val periods = cached<PeriodosResponse>("dashboard_periodos_$user")
@@ -141,10 +148,12 @@ class DashboardViewModel(app: Application, private val token: String, private va
             if (term.toIntOrNull() == null) null else try { term to gson.fromJson(json, HorarioResponse::class.java) }
             catch (_: Exception) { null }
         }.toMap().toMutableMap()
-        cached<HorarioResponse>("horario_ultimo_$user")?.let { schedules.putIfAbsent(current, it) }
-        val agenda = agendaRepository.cached(user)
+        if (cache.cargar("horario_ultimo_periodo_$user") == current) {
+            cached<HorarioResponse>("horario_ultimo_$user")?.let { schedules.putIfAbsent(current, it) }
+        }
         val times = mutableMapOf<String, Long?>()
-        for (key in listOf("agenda_$user", "notificaciones_$user", attendanceCacheKey) + schedules.keys.map(::scheduleCacheKey)) {
+        times[gradeCacheKey] = gradesCache.observarFecha(gradeCacheKey).first()
+        for (key in listOf("notificaciones_$user", attendanceCacheKey) + schedules.keys.map(::scheduleCacheKey)) {
             times[key] = cache.actualizado(key)
         }
         val savedProjected = mutableMapOf<String, Any?>()
@@ -157,11 +166,29 @@ class DashboardViewModel(app: Application, private val token: String, private va
         savedGrades?.let {
             val key = (it.periodo ?: current) to (it.carrera ?: "UG")
             gradeVariants[key] = it
+            variantTimes[key] = times[gradeCacheKey]
             projections[key] = savedProjected
         }
+        for ((key, json) in cache.listarPorPrefijo("grade_variant_${user}_")) {
+            try {
+                val suffix = key.removePrefix("grade_variant_${user}_")
+                val term = suffix.substringBefore('_')
+                val career = suffix.substringAfter('_')
+                val variant = com.example.upaos.data.local.restoreGradeVariant(json, term, career) ?: continue
+                if (key != com.example.upaos.data.local.gradeVariantKey(user, term, career)) continue
+                val identity = term to career
+                val updated = cache.actualizado(key)
+                if (updated != null && updated > (variantTimes[identity] ?: 0)) {
+                    gradeVariants[identity] = variant
+                    variantTimes[identity] = updated
+                }
+            } catch (e: CancellationException) { throw e } catch (_: Exception) { }
+        }
+        savedGrades?.let { variantTimes.putIfAbsent((it.periodo ?: current) to (it.carrera ?: "UG"), times[gradeCacheKey]) }
         val isCurrentGrades = savedGrades?.periodo == current
-        val initialGrades = if (isCurrentGrades) savedGrades else null
+        val initialGrades = gradeVariants[current to (savedGrades?.carrera ?: "UG")] ?: if (isCurrentGrades) savedGrades else null
         val initialProjected = if (isCurrentGrades) savedProjected else emptyMap()
+        times[gradeCacheKey] = variantTimes[current to (initialGrades?.carrera ?: "UG")]
 
         mutable.value = state.value.copy(
             periods = periods?.periodos ?: emptyList(),
@@ -175,15 +202,20 @@ class DashboardViewModel(app: Application, private val token: String, private va
             attendance = cached(attendanceCacheKey),
             schedules = schedules,
             notices = cached("notificaciones_$user"),
-            agenda = agenda.first,
             times = times,
             week = cached("semana_$user")
         )
         loaded = true
+        android.util.Log.i("UPAO_LoadTiming", "phase=cache_restored durationMs=${android.os.SystemClock.elapsedRealtime()-cacheStarted}")
     }
 
-    private suspend fun refreshRound() = ForegroundRefreshGate.lock.withLock {
-        loadCache()
+    private suspend fun refreshRound() {
+        cacheReady.join()
+        refreshNetwork()
+    }
+
+    private suspend fun refreshNetwork() = ForegroundRefreshGate.lock.withLock {
+        val networkStarted = android.os.SystemClock.elapsedRealtime()
         val version = selectionVersion
         mutable.value = state.value.copy(busy = true, errors = emptyMap())
         var result = state.value
@@ -194,6 +226,12 @@ class DashboardViewModel(app: Application, private val token: String, private va
             try { action(); fresh += key }
             catch (e: CancellationException) { throw e }
             catch (e: Exception) { errors[key] = e.message ?: "Actualización pendiente" }
+            // Publish each completed source without waiting for unrelated endpoints.
+            // A new selection owns the visible state until its own round completes.
+            if (selectionVersion == version) {
+                mutable.value = result.copy(busy = true, fresh = fresh.toSet(),
+                    times = times.toMap(), errors = errors.toMap())
+            }
         }
         suspend fun save(key: String, value: Any) {
             cache.guardar(key, gson.toJson(value)); times[key] = cache.actualizado(key)
@@ -222,17 +260,18 @@ class DashboardViewModel(app: Application, private val token: String, private va
                 val grades = upaoRepository.buscarNotas(result.gradePeriod, result.career)
                 gradeVariants[result.gradePeriod to result.career] = grades
                 result = result.copy(grades = grades)
+                val variantKey = com.example.upaos.data.local.gradeVariantKey(user, result.gradePeriod, result.career)
+                cache.guardar(variantKey, gson.toJson(grades))
+                variantTimes[result.gradePeriod to result.career] = cache.actualizado(variantKey)
+                times[gradeCacheKey] = variantTimes[result.gradePeriod to result.career]
                 if (result.gradePeriod == result.currentPeriod) {
                     gradesCache.guardar(gradeCacheKey, gson.toJson(grades))
                     times[gradeCacheKey] = gradesCache.observarFecha(gradeCacheKey).first()
-                } else {
-                    cache.guardar("notas_${user}_${result.gradePeriod}", gson.toJson(grades))
                 }
                 for (course in grades.cursos) {
                     val crn = course.crn ?: course.courseReferenceNumber ?: continue
                     attempt("proyectada_$crn") {
-                        val detail = upaoRepository.getDetalleCurso(result.gradePeriod, result.career, crn)
-                        val puntosCalculados = com.example.upaos.data.upao.Calculators.progreso(detail.detalles, result.gradePeriod)?.acumulado
+                        val puntosCalculados = com.example.upaos.data.upao.Calculators.progreso(course.componentes, result.gradePeriod)?.acumulado
                         result = result.copy(projected = result.projected + (crn to puntosCalculados))
                         puntosCalculados?.let { gradesCache.guardar("proyectada_${user}_$crn", it.toString()) }
                     }
@@ -277,18 +316,17 @@ class DashboardViewModel(app: Application, private val token: String, private va
             attempt("notificaciones_$user") {
                 val notices = upaoRepository.getNotificaciones(user)
                 result = result.copy(notices = notices)
-                save("notificaciones_$user", notices)
-            }
-            attempt("agenda_$user") {
-                val agenda = agendaRepository.refresh(user); result = result.copy(agenda = agenda)
-                times["agenda_$user"] = agendaRepository.cached(user).second
+                // This is local history, not a remote snapshot. Never write a stale copy back.
             }
             // Publish the whole round together. Preserve selections changed while requests were in flight.
             val chosen = state.value
             val gradePeriod = if (gradeChosen) chosen.gradePeriod else result.gradePeriod
             val career = if (selectionVersion != version && gradeChosen) chosen.career else result.career
             val sameGrades = gradePeriod == result.gradePeriod && career == result.career
-            mutable.value = result.copy(busy = false, fresh = fresh, times = times, errors = errors,
+            mutable.value = result.copy(busy = false,
+                fresh = if (sameGrades) fresh else fresh - gradeCacheKey,
+                times = times + (gradeCacheKey to variantTimes[gradePeriod to career]),
+                errors = if (sameGrades) errors else errors - gradeCacheKey,
                 gradePeriod = gradePeriod, career = career,
                 grades = gradeVariants[gradePeriod to career],
                 average = if (sameGrades) result.average else averages[gradePeriod to career],
@@ -299,7 +337,10 @@ class DashboardViewModel(app: Application, private val token: String, private va
             completedSelectionVersion = version
             try { com.example.upaos.widget.ResumenNotasWidget.updateAll(getApplication()) } catch (_: Exception) { }
             try { com.example.upaos.widget.ProximoCursoWidget.updateAll(getApplication()) } catch (_: Exception) { }
-        } finally { if (state.value.busy) mutable.value = state.value.copy(busy = false) }
+        } finally {
+            if (state.value.busy) mutable.value = state.value.copy(busy = false)
+            android.util.Log.i("UPAO_LoadTiming", "phase=network_round durationMs=${android.os.SystemClock.elapsedRealtime()-networkStarted} errors=${errors.size}")
+        }
     }
 
     companion object {

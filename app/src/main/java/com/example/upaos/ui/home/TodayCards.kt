@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.upaos.data.agenda.AgendaItem
 import com.example.upaos.data.model.NotificacionItem
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -50,7 +49,7 @@ fun TodayHero(
     tasks: Int?,
     news: Int?,
     onSchedule: () -> Unit = {},
-    onCanvas: () -> Unit = {},
+    onTasks: () -> Unit = {},
     onNotifications: () -> Unit = {}
 ) {
     Column(
@@ -81,7 +80,7 @@ fun TodayHero(
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HeroMetric(classes, "Clases", Icons.Filled.Schedule, Modifier.weight(1f), onClick = onSchedule)
-            HeroMetric(tasks, "Pendientes", Icons.AutoMirrored.Filled.Assignment, Modifier.weight(1f), onClick = onCanvas)
+            HeroMetric(tasks, "Pendientes", Icons.AutoMirrored.Filled.Assignment, Modifier.weight(1f), onClick = onTasks)
             HeroMetric(news, "Novedades", Icons.Filled.Notifications, Modifier.weight(1f), onClick = onNotifications)
         }
     }
@@ -242,83 +241,6 @@ fun TodaySchedule(classes: List<NextClass>, available: Boolean, now: Long, updat
                     Spacer(Modifier.weight(1f))
                 }
                 TextButton(onClick = onSchedule) { Text("Ver horario", color = theme.cardAccent, fontWeight = FontWeight.Bold) }
-            }
-        }
-    }
-}
-
-@Composable
-fun TodayAssignments(items: List<AgendaItem>, now: Long, updated: Long?, current: Boolean, onCanvas: () -> Unit) {
-    if (items.isEmpty()) return
-    val theme = rememberTodayCardTheme()
-
-    CampusCard(
-        Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = theme.cardBg, contentColor = theme.cardTextColor),
-        border = BorderStroke(1.dp, theme.cardBorder)
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(shape = RoundedCornerShape(14.dp), color = theme.cardIconBg) {
-                    Icon(Icons.AutoMirrored.Filled.Assignment, null, Modifier.padding(12.dp).size(22.dp), tint = theme.cardAccent)
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("Por entregar hoy", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = theme.cardTextColor)
-                    Text("Tus tareas y entregas del día", style = MaterialTheme.typography.bodySmall, color = theme.cardSubtextColor)
-                }
-                Surface(shape = RoundedCornerShape(12.dp), color = theme.cardIconBg) {
-                    Text(items.size.toString(), Modifier.padding(horizontal = 12.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold, color = theme.cardAccent)
-                }
-            }
-            if (items.isEmpty()) {
-                TodayEmptyState(if (updated == null) "Conecta Canvas para ver tus entregas" else "Sin entregas pendientes para hoy",
-                    if (updated == null) "Conecta tu cuenta desde la pestaña Canvas." else if (current) "No tienes entregas pendientes que venzan hoy." else "No hay entregas de hoy en los datos guardados.")
-            } else {
-                items.forEach { assignment -> androidx.compose.runtime.key(assignment.key) { TodayAssignment(assignment, now, true, theme) } }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onCanvas) { Text("Ver Canvas", color = theme.cardAccent, fontWeight = FontWeight.Bold) }
-            }
-        }
-    }
-}
-
-@Composable
-fun TodayAssignment(item: AgendaItem, now: Long, todayOnly: Boolean, theme: TodayCardTheme = rememberTodayCardTheme()) {
-    val context = LocalContext.current
-    val deliveryUrl = item.url?.takeIf { Uri.parse(it).scheme == "https" && Uri.parse(it).host == "upao.instructure.com" }
-    fun openDelivery() { deliveryUrl?.let { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(it))) } }
-    val late = !item.submitted && !item.graded && (item.dueMillis ?: Long.MAX_VALUE) < now
-    val accent = if (late) MaterialTheme.colorScheme.error else theme.cardAccent
-
-    CampusCard(
-        Modifier.fillMaxWidth().clickable(enabled = deliveryUrl != null, onClick = { openDelivery() }),
-        shape = RoundedCornerShape(18.dp),
-        colors = CardDefaults.cardColors(containerColor = theme.innerCardBg, contentColor = theme.cardTextColor),
-        border = BorderStroke(1.dp, theme.innerCardBorder)
-    ) {
-        Row(Modifier.height(IntrinsicSize.Min)) {
-            Box(Modifier.width(4.dp).fillMaxHeight().background(accent))
-            Column(Modifier.weight(1f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(item.course, style = MaterialTheme.typography.labelMedium, color = theme.cardSubtextColor)
-                Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = theme.cardTextColor)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Icon(Icons.Filled.Schedule, null, Modifier.size(17.dp), tint = accent)
-                    Text(item.dueMillis?.let { if (todayOnly) "Hoy · ${campusFormat(it, "HH:mm")}" else "Vence ${campusFormat(it, "dd/MM HH:mm")}" } ?: "Sin fecha de entrega", style = MaterialTheme.typography.bodySmall, color = accent)
-                    Spacer(Modifier.weight(1f))
-                    Surface(color = accent.copy(alpha = .12f), shape = RoundedCornerShape(8.dp)) {
-                        Text(if (todayOnly && late) "Vencida hoy" else item.status(now), Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                            style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = accent)
-                    }
-                }
-                if (deliveryUrl != null) {
-                    TextButton(onClick = { openDelivery() }, contentPadding = PaddingValues(0.dp)) {
-                        Text("Ver entrega", color = accent, fontWeight = FontWeight.Bold)
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, null, Modifier.padding(start = 6.dp).size(16.dp), tint = accent)
-                    }
-                }
             }
         }
     }

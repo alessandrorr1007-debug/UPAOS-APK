@@ -43,7 +43,7 @@ object GradeSyncController {
         ensureBackup(context)
         val intent = Intent(context, GradeSyncService::class.java)
         if (mode(context) == SyncPolicy.Mode.NORMAL) context.stopService(intent)
-        else if ((visible || allowBackgroundStart) && !suspended && !GradeSyncService.running) {
+        else if (visible && !suspended && !GradeSyncService.running) {
             try { ContextCompat.startForegroundService(context, intent) }
             catch (e: RuntimeException) { suspended = true; Log.w("UPAO_GradeSync", "Inicio intensivo rechazado; respaldo activo", e) }
         }
@@ -63,6 +63,7 @@ object GradeSyncController {
     }
     fun cancel(context: Context) {
         WorkManager.getInstance(context).cancelUniqueWork(BACKUP)
+        WorkManager.getInstance(context).cancelUniqueWork("grade_sync_now")
         context.stopService(Intent(context, GradeSyncService::class.java))
     }
 }

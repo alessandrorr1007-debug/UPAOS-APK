@@ -197,17 +197,18 @@ fun HtmlText(
     modifier: Modifier = Modifier
 ) {
     var destination by remember(html) { mutableStateOf<CanvasNativeRoute?>(null) }
+    var webUrl by remember(html) { mutableStateOf<String?>(null) }
+    webUrl?.let { InAppWebViewModal(it, "Contenido", { webUrl = null }) }
     val htmlToken = canvasSavedToken()
     destination?.let { route -> CanvasLinkedResource(route, htmlToken) { destination = null } }
     val safeHtml = remember(html) { canvasSafeHtml(html) }
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val linkColor = MaterialTheme.colorScheme.primary.toArgb()
     if (safeHtml.contains("<table", ignoreCase = true)) {
-        val richContext = LocalContext.current
         Column(modifier) {
             CanvasRichHtmlView(safeHtml, Modifier.fillMaxWidth()) { url ->
                 val route = canvasNativeRoute(url)
-                if (route != null) destination = route else openCanvasContentLink(richContext, url)
+                if (route != null) destination = route else webUrl = url
             }
             CanvasInlineImages(html, htmlToken)
         }
@@ -241,7 +242,7 @@ fun HtmlText(
                 text.setSpan(object : android.text.style.ClickableSpan() {
                     override fun onClick(widget: android.view.View) {
                         val route = canvasNativeRoute(link.url)
-                        if (route != null) destination = route else openCanvasContentLink(widget.context, link.url)
+                        if (route != null) destination = route else webUrl = link.url
                     }
                 }, start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
@@ -343,7 +344,7 @@ fun CanvasContent(
                 onOpenAssignment = { selectedTodoDetail = it },
                 onOpenGroup = { selectedGroupDetail = it },
                 onOpenFile = { fileItem, modName -> selectedFileItem = Pair(fileItem, modName) },
-                onOpenUrl = { url, _ -> openCanvasContentLink(context, url) },
+                onOpenUrl = { url, title -> inAppWebUrl = url to title },
                 todoItems = items,
                 notifications = notifications,
                 modifier = modifier
@@ -360,12 +361,11 @@ fun CanvasContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Canvas LMS Hub",
+                            text = "Canvas",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        com.example.upaos.ui.home.Freshness(lastUpdatedMillis, !isOffline && lastUpdatedMillis != null)
                         val subtexto = when {
                             isOffline -> "Datos guardados · pendiente de actualizar"
                             lastUpdatedMillis != null -> formatActualizado(lastUpdatedMillis)
@@ -445,15 +445,7 @@ fun CanvasContent(
                                 Icon(Icons.Filled.School, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Cursos", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                                if (courses.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary
-                                    ) {
-                                        Text("${courses.size}", fontSize = 10.sp)
-                                    }
-                                }
+
                             }
                         }
                     )
@@ -517,7 +509,7 @@ fun CanvasContent(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.Mail, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Bandeja de entrada", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Mensajes", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                                 val unread = conversations.count { it.isUnread }
                                 if (unread > 0) {
                                     Spacer(modifier = Modifier.width(4.dp))
@@ -531,8 +523,6 @@ fun CanvasContent(
                             }
                         }
                     )
-                    Tab(selected = selectedMainTab == 4, onClick = { selectedMainTab = 4 }, text = { Text("Anuncios") })
-                    Tab(selected = selectedMainTab == 5, onClick = { selectedMainTab = 5 }, text = { Text("Calendario") })
 
                 }
 
@@ -545,7 +535,7 @@ fun CanvasContent(
 
                 // Contenido por Pestaña
                 when (selectedMainTab) {
-                    0 -> CanvasCoursesOverview(savedCanvasToken.orEmpty(), courses, isLoadingCourses, isRefreshingCourses,
+                    0 -> CanvasCoursesOverview(courses, isLoadingCourses, isRefreshingCourses,
                         { fetchCourses(true) }) { selectedCourseForDetail = it }
                     1 -> {
                         // TAB PENDIENTES
@@ -650,8 +640,6 @@ fun CanvasContent(
                         }
                     }
                     3 -> CanvasNativeInbox(savedCanvasToken.orEmpty(), courses) { selectedConversationDetail = it }
-                    4 -> CanvasAnnouncements(savedCanvasToken.orEmpty(), courses.map { it.id })
-                    5 -> CanvasCalendar(savedCanvasToken.orEmpty(), courses.map { it.id })
 
                 }
             }
@@ -757,12 +745,11 @@ fun CanvasConversationCard(
                 }
             }
 
-            if (relativeDate.isNotBlank()) {
-                Text(
-                    text = relativeDate,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                if (relativeDate.isNotBlank()) Text(relativeDate,
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (conversation.isUnread) Text("No leído", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
             }
         }
 
@@ -780,7 +767,7 @@ fun CanvasConversationCard(
         if (!conversation.lastMessage.isNullOrBlank()) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = conversation.lastMessage.trim(),
+                text = org.jsoup.Jsoup.parse(conversation.lastMessage).text(),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
@@ -789,26 +776,6 @@ fun CanvasConversationCard(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Tocar para leer mensaje",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(
-                imageVector = Icons.Filled.Visibility,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(13.dp)
-            )
-        }
     }
 }
 
@@ -919,7 +886,7 @@ fun CanvasTodoItemCard(
 
     AppCard(
         modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(10.dp),
         onClick = onClick
     ) {
         // Tag superior: Curso y Tipo (Tarea vs Examen)
@@ -983,19 +950,19 @@ fun CanvasTodoItemCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // Título del pendiente
         Text(
             text = item.title,
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
         )
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // Fecha de entrega y puntuación
         Row(
@@ -1029,26 +996,6 @@ fun CanvasTodoItemCard(
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Tocar para ver detalle e instrucciones",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Icon(
-                imageVector = Icons.Filled.Visibility,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(13.dp)
-            )
-        }
     }
 }
 
@@ -1245,7 +1192,7 @@ fun CanvasAssignmentDetailSheet(
             CanvasAssignmentExtras(resolvedItem)
             Spacer(modifier = Modifier.height(24.dp))
 
-            CanvasExternalButton(assignment?.htmlUrl ?: resolvedItem.webUrl, "Entregar en Canvas")
+            CanvasExternalButton(assignment?.htmlUrl ?: resolvedItem.webUrl, "Entregar en Canvas", external = true)
 
             PrimaryButton(
                 text = "Cerrar",
@@ -1698,7 +1645,9 @@ fun CanvasFileViewerSheet(
     onDismiss: () -> Unit
 ) {
     val resource = canvasResourceViewModel("fileDetail:${item.id}", token, null as CanvasFileDetail?) {
-        if (item.url.isNullOrBlank()) null else fileByUrl(item.url)
+        val id = item.contentId
+        if (id != null) fileByUrl("https://upao.instructure.com/api/v1/files/$id")
+        else if (!item.url.isNullOrBlank()) fileByUrl(item.url) else null
     }
     val state by resource.state.collectAsState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -1713,14 +1662,13 @@ fun CanvasFileViewerSheet(
 
 @Composable
 fun InAppWebViewModal(url: String, title: String, onDismiss: () -> Unit) {
-    val context = LocalContext.current
     val route = remember(url) { canvasNativeRoute(url) }
     if (route != null) {
         CanvasLinkedResource(route, canvasSavedToken(), onDismiss)
     } else if (url.startsWith("private-pdf:")) {
         CanvasReadDetail(title, onDismiss) { Box(Modifier.height(500.dp)) { PrivatePdfViewer(url.removePrefix("private-pdf:")) } }
     } else {
-        LaunchedEffect(url) { openCanvasContentLink(context, url); onDismiss() }
+        CanvasWebContent(url, title, onDismiss)
     }
 }
 
@@ -1733,7 +1681,7 @@ fun CanvasSetupView(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    var tokenInput by remember(usuario, initialToken) { mutableStateOf(initialToken) }
+    var tokenInput by remember(usuario, initialToken) { mutableStateOf("") }
     val tokens = remember(context) { TokenManager(context.applicationContext) }
     val session = tokens.getSessionId()
     val setupRepository = remember(context, usuario, session) {
@@ -1748,12 +1696,13 @@ fun CanvasSetupView(
     val setupState by setup.state.collectAsState()
     val isValidating = setupState.loading
     val errorText = setupState.error
-    val userNameDetected = setupState.userName
+
     fun validarYGuardar() = setup.validate(tokenInput)
     LaunchedEffect(setupState.savedToken) {
         setupState.savedToken?.let { saved ->
             setup.consumeSavedToken()
-            Toast.makeText(context, "¡Conectado con Canvas como " + userNameDetected + "!", Toast.LENGTH_LONG).show()
+            tokenInput = ""
+            Toast.makeText(context, "Canvas conectado", Toast.LENGTH_SHORT).show()
             onTokenSaved(saved)
         }
     }
@@ -1792,7 +1741,7 @@ fun CanvasSetupView(
         Spacer(modifier = Modifier.height(6.dp))
 
         Text(
-            text = "Sincroniza tus tareas, exámenes, avisos y materiales de clase directamente desde Canvas LMS.",
+            text = "Conecta tu cuenta de Canvas para consultar tus tareas en Hoy.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1848,7 +1797,8 @@ fun CanvasSetupView(
                 setup.clearError()
             },
             label = "Token de Acceso de Canvas",
-            placeholder = "Pega aquí tu token (ej. 17977~...)",
+            placeholder = "Pega aquí tu token",
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
             singleLine = false,
             maxLines = 3,
             isError = errorText != null,

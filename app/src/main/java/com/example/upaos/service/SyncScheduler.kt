@@ -11,63 +11,63 @@ import com.example.upaos.data.local.TokenManager
 import java.time.ZonedDateTime
 import java.util.concurrent.TimeUnit
 
-/** One adaptive WorkManager chain. Exact alarms are reserved for class reminders. */
+/** Persistent periodic checks with an adaptive due time. No self-rescheduling chain. */
 object SyncScheduler {
     const val ACTION_SYNC = "com.example.upaos.ACTION_SYNC_10MIN"
-    private const val WORK_NAME = "upao_adaptive_sync"
+    private const val WORK_NAME = "upao_attendance_periodic_v2"
+    private const val IMMEDIATE = "upao_attendance_now_v2"
 
     fun start(context: Context) = synchronized(SessionCleanup.lock) {
         GradeSyncController.reconcile(context)
         removeLegacySchedules(context)
-        enqueue(context, ExistingWorkPolicy.KEEP)
+        enqueue(context)
     }
 
-    /** Called once by a completed worker; APPEND avoids cancelling that running worker. */
+    /** Periodic work survives interruption; this timestamp only controls adaptive polling. */
     fun scheduleNext(
         context: Context,
         fallosConsecutivos: Int = NotificationPreferences(context).syncConsecutiveFailures,
         esErrorFatal: Boolean = false
-    ) = synchronized(SessionCleanup.lock) {
-        enqueue(context, ExistingWorkPolicy.APPEND_OR_REPLACE, fallosConsecutivos, esErrorFatal)
+    ) {
+        val prefs = NotificationPreferences(context)
+        val delay = if (esErrorFatal) java.time.Duration.ofHours(1) else SyncIntervalPolicy.proximoIntervalo(
+            ZonedDateTime.now(SyncIntervalPolicy.ZONE_LIMA),
+            SyncIntervalPolicy.SyncContext(fallosConsecutivos = fallosConsecutivos,
+                periodoAcademico = prefs.syncAcademicPeriod))
+        prefs.nextAttendanceAttempt = System.currentTimeMillis() + delay.toMillis()
     }
 
-    private fun enqueue(
-        context: Context,
-        policy: ExistingWorkPolicy,
-        failures: Int = NotificationPreferences(context).syncConsecutiveFailures,
-        fatal: Boolean = false,
-        immediate: Boolean = false
-    ) {
-        val tokens = TokenManager(context)
+    private fun enqueue(context: Context) {
         val prefs = NotificationPreferences(context)
-        if (!tokens.shouldKeepLoggedIn() || (!prefs.checkAsistenciaEnabled && !prefs.checkNotasEnabled)) {
-            cancel(context)
+        val work = WorkManager.getInstance(context)
+        if (!TokenManager(context).shouldKeepLoggedIn() || !prefs.checkAsistenciaEnabled) {
+            work.cancelUniqueWork(WORK_NAME)
             return
         }
-        val delay = SyncIntervalPolicy.proximoIntervalo(
-            ZonedDateTime.now(SyncIntervalPolicy.ZONE_LIMA),
-            SyncIntervalPolicy.SyncContext(fallosConsecutivos = failures, esErrorFatal = fatal,
-                periodoAcademico = prefs.syncAcademicPeriod)
-        )
-        if (delay.isZero) return
-        val request = OneTimeWorkRequestBuilder<AsistenciaWorker>()
+        val request = PeriodicWorkRequestBuilder<AsistenciaWorker>(15, TimeUnit.MINUTES, 5, TimeUnit.MINUTES)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .setInitialDelay(if (immediate) 0 else delay.toMillis(), TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(WORK_NAME, policy, request)
+        work.enqueueUniquePeriodicWork(WORK_NAME, ExistingPeriodicWorkPolicy.KEEP, request)
     }
 
     fun runNow(context: Context) = synchronized(SessionCleanup.lock) {
         removeLegacySchedules(context)
         GradeSyncController.ensureBackup(context)
-        WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<GradeBackupWorker>().build())
-        // A manual request replaces a delayed chain; cancellation propagates from any old round.
-        enqueue(context, ExistingWorkPolicy.REPLACE, immediate = true)
+        val constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+        val work = WorkManager.getInstance(context)
+        if (NotificationPreferences(context).checkNotasEnabled) work.enqueueUniqueWork(
+            "grade_sync_now", ExistingWorkPolicy.KEEP,
+            OneTimeWorkRequestBuilder<GradeBackupWorker>().setConstraints(constraints).build())
+        if (NotificationPreferences(context).checkAsistenciaEnabled) work.enqueueUniqueWork(
+            IMMEDIATE, ExistingWorkPolicy.KEEP, OneTimeWorkRequestBuilder<AsistenciaWorker>()
+                .setInputData(workDataOf("manual" to true)).setConstraints(constraints).build())
     }
 
     fun cancel(context: Context) = synchronized(SessionCleanup.lock) {
         GradeSyncController.cancel(context)
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        WorkManager.getInstance(context).cancelUniqueWork(IMMEDIATE)
         removeLegacySchedules(context)
     }
 
@@ -80,7 +80,7 @@ object SyncScheduler {
             alarms?.cancel(it)
             it.cancel()
         }
-        for (name in listOf("upao_unified_periodic_sync", "upao_unified_onetime_sync",
+        for (name in listOf("upao_adaptive_sync", "upao_unified_periodic_sync", "upao_unified_onetime_sync",
             "upao_immediate_sync", "upao_asistencia_check", "upao_asistencia_5min_check")) {
             WorkManager.getInstance(context).cancelUniqueWork(name)
         }

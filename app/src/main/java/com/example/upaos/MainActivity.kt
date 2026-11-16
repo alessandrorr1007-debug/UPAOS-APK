@@ -396,6 +396,7 @@ class MainActivity : FragmentActivity() {
                                 onOpenCalculator = {
                                     navController.navigate("calculadora")
                                 },
+                                onOpenIntegrations = { navController.navigate("settings?integrations=true") },
                                 onOpenSettings = {
                                     navController.navigate("settings")
                                 },
@@ -472,7 +473,8 @@ class MainActivity : FragmentActivity() {
                         }
 
                         composable(
-                            "settings",
+                            "settings?integrations={integrations}",
+                            arguments = listOf(navArgument("integrations") { type = NavType.BoolType; defaultValue = false }),
                             enterTransition = { slideInHorizontally(tween(280)) { it } },
                             exitTransition = { fadeOut(tween(180)) },
                             popEnterTransition = { fadeIn(tween(220)) },
@@ -480,6 +482,7 @@ class MainActivity : FragmentActivity() {
                         ) { settingsEntry ->
                             BackHandler { volverDesde(settingsEntry) }
                             SettingsScreen(
+                                openIntegrations = settingsEntry.arguments?.getBoolean("integrations") == true,
                                 usuario = tokenManager.getSavedUser(),
                                 onBack = { volverDesde(settingsEntry) },
                                 onAccountRemoved = { navController.navigate("elige-cuenta") { popUpTo(0) { inclusive = true } } }
@@ -543,6 +546,7 @@ class MainActivity : FragmentActivity() {
 
 @Composable
 fun SplashScreen(onTimeout: () -> Unit) {
+    val splashContext = androidx.compose.ui.platform.LocalContext.current
     var startAnim by remember { mutableStateOf(false) }
 
     val scale by animateFloatAsState(
@@ -553,7 +557,8 @@ fun SplashScreen(onTimeout: () -> Unit) {
 
     LaunchedEffect(Unit) {
         startAnim = true
-        delay(1200)
+        val tokens = TokenManager(splashContext)
+        if (!tokens.shouldKeepLoggedIn() || tokens.getSavedUser().isNullOrBlank()) delay(1200)
         onTimeout()
     }
 

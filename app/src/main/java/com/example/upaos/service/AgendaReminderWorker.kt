@@ -15,7 +15,6 @@ import androidx.work.*
 import com.example.upaos.MainActivity
 import com.example.upaos.data.agenda.AgendaRepository
 import com.example.upaos.data.local.TokenManager
-import kotlinx.coroutines.CancellationException
 import java.util.concurrent.TimeUnit
 
 class AgendaReminderWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
@@ -28,7 +27,6 @@ class AgendaReminderWorker(context: Context, parameters: WorkerParameters) : Cor
         val hours = prefs.getInt("hours", 0)
         if (hours == 0 || tokens.getCanvasToken(user).isNullOrBlank()) return Result.success()
         val repository = AgendaRepository(applicationContext)
-        try { if (!com.example.upaos.data.refresh.ForegroundRefreshGate.active) repository.refresh(user) } catch (e: CancellationException) { throw e } catch (e: Exception) { android.util.Log.w("AgendaReminder", "No se pudo actualizar la agenda") }
         val (items, updated) = repository.cached(user)
         // Avoid false alerts from submissions that could not be checked recently.
         val now = System.currentTimeMillis()

@@ -88,7 +88,8 @@ data class CanvasSubmission(
     val grade: String? = null,
     val late: Boolean? = null, val missing: Boolean? = null,
     @SerializedName("submission_comments") val comments: List<CanvasSubmissionComment>? = null,
-    @SerializedName("rubric_assessment") val rubricAssessment: Map<String, CanvasRubricAssessment>? = null
+    @SerializedName("rubric_assessment") val rubricAssessment: Map<String, CanvasRubricAssessment>? = null,
+    val excused: Boolean? = null
 ) {
     val isSubmitted: Boolean
         get() = !submittedAt.isNullOrBlank() ||
@@ -125,6 +126,7 @@ data class CanvasAssignment(
     val rubric: List<CanvasRubricCriterion>? = emptyList(),
     @SerializedName("html_url") val htmlUrl: String? = null,
     @SerializedName("has_submitted_submissions") val hasSubmittedSubmissions: Boolean? = false,
+    val published: Boolean? = null,
     val submission: CanvasSubmission? = null,
     @SerializedName("course_id") val courseId: Long? = null
 ) {
@@ -266,6 +268,7 @@ data class CanvasModuleItem(
     @SerializedName("indent") val indent: Int? = 0,
     @SerializedName("content_id") val contentId: Long? = null,
     @SerializedName("page_url") val pageUrl: String? = null,
+    @SerializedName("external_url") val externalUrl: String? = null,
     @SerializedName("completion_requirement") val completionRequirement: CanvasCompletionRequirement? = null
 
 ) {
@@ -339,5 +342,3 @@ data class CourseZoomMeeting(
     val origin: String = "CANVAS_TAB", // "CANVAS_TAB", "MODULE", "ANNOUNCEMENT", "SYLLABUS", "CUSTOM"
     val description: String? = null
 )
-
-

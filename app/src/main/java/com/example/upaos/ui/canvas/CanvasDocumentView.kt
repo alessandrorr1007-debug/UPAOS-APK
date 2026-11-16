@@ -1,6 +1,5 @@
 package com.example.upaos.ui.canvas
 
-import android.content.Intent
 import android.graphics.BitmapFactory
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,7 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -37,7 +35,11 @@ class CanvasDocumentViewModel : ViewModel() {
                 ensureActive()
                 mutable.value = CanvasDocumentState(file)
             } catch (e: CancellationException) { throw e }
-            catch (_: Exception) { mutable.value = CanvasDocumentState(error = "No se pudo obtener el documento. Comprueba el acceso y vuelve a intentar.") }
+            catch (e: Exception) { mutable.value = CanvasDocumentState(error = when (e) {
+                is CanvasDocumentException -> e.message
+                is java.net.SocketTimeoutException -> "Canvas tardó demasiado en entregar el documento. Vuelve a intentar."
+                else -> "No se pudo obtener el documento. Comprueba la conexión y vuelve a intentar."
+            }) }
         }
     }
     override fun onCleared() { state.value.file?.delete() }
@@ -53,9 +55,11 @@ internal fun CanvasDocument(metadata: CanvasFileDetail, token: String, inline: B
     val state by vm.state.collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(metadata.id, inline) {
-        if (inline && metadata.contentType?.startsWith("image/") == true && metadata.size != null && metadata.size <= 2L * 1024 * 1024)
+        if (!inline || (metadata.contentType?.startsWith("image/") == true && metadata.size != null && metadata.size <= 2L * 1024 * 1024))
             vm.download(metadata, File(File(context.cacheDir, "canvas_documents"), canvasDocumentOwner(tokens.getSavedUser().orEmpty())), repository)
     }
+    var showOriginal by remember(metadata.id) { mutableStateOf(false) }
+    if (showOriginal) CanvasWebContent("https://upao.instructure.com/files/${metadata.id}/preview", metadata.fileName) { showOriginal = false }
     var saveMessage by remember { mutableStateOf<String?>(null) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(metadata.contentType ?: "application/octet-stream")) { uri ->
         val file = state.file
@@ -70,14 +74,13 @@ internal fun CanvasDocument(metadata: CanvasFileDetail, token: String, inline: B
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("${metadata.fileName} · ${metadata.formattedSize}")
         if (metadata.lockedForUser == true || metadata.hiddenForUser == true || metadata.locked == true) Text("Archivo restringido por Canvas")
-        else if (state.file == null) Button(enabled = !state.loading, onClick = {
+        else if (state.error != null) TextButton(onClick = {
             vm.download(metadata, File(File(context.cacheDir, "canvas_documents"), canvasDocumentOwner(tokens.getSavedUser().orEmpty())), repository)
-        }) { Text("Descargar para consultar") }
+        }) { Text("Reintentar") }
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         saveMessage?.let { Text(it) }
         state.file?.let { file ->
-            Text("Descarga lista · almacenamiento privado")
             TextButton(onClick = { export.launch(metadata.fileName.replace(Regex("[\\\\/:*?\"<>|]"), "_")) }) { Text("Guardar una copia…") }
             when {
                 metadata.contentType == "application/pdf" || file.extension == "pdf" -> LocalCanvasPdf(file)
@@ -93,13 +96,29 @@ internal fun CanvasDocument(metadata: CanvasFileDetail, token: String, inline: B
                     }
                     bitmap?.let { Image(it.asImageBitmap(), metadata.fileName, Modifier.fillMaxWidth()) }
                 }
-                else -> TextButton(onClick = {
-                    runCatching {
-                        val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-                        context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, metadata.contentType ?: "application/octet-stream")
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-                    }.onFailure { saveMessage = "No hay un visor instalado para este formato" }
-                }) { Text("Abrir con una aplicación instalada") }
+                metadata.filename?.endsWith(".docx", true) == true || metadata.fileName.endsWith(".docx", true) ||
+                    metadata.contentType == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> {
+                    val preview by produceState<Result<String>?>(null, file) {
+                        value = withContext(Dispatchers.IO) { runCatching { canvasDocxHtml(file) } }
+                    }
+                    if (preview == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    preview?.getOrNull()?.let {
+                        Text("Vista de lectura · texto y tablas", style = MaterialTheme.typography.labelSmall)
+                        CanvasRichHtmlView(it, Modifier.fillMaxWidth()) {}
+                    }
+                    if (preview?.isFailure == true) Text("No se pudo generar la vista de Word. Puedes consultar el formato original.")
+                    TextButton(onClick = { showOriginal = true }) { Text("Ver formato original") }
+                }
+                metadata.contentType?.startsWith("text/") == true -> {
+                    val text by produceState<String?>(null, file) {
+                        value = withContext(Dispatchers.IO) { file.inputStream().use { it.bufferedReader().readText().take(500000) } }
+                    }
+                    text?.let { Text(it) }
+                }
+                else -> {
+                    LaunchedEffect(file) { showOriginal = true }
+                    TextButton(onClick = { showOriginal = true }) { Text("Ver documento") }
+                }
             }
         }
     }
@@ -121,9 +140,16 @@ internal fun CanvasInlineImages(html: String, token: String) {
 
 @Composable
 internal fun LocalCanvasPdf(file: File) {
-    val pages by produceState(0, file) { value = withContext(Dispatchers.IO) { runCatching {
-        android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { fd -> android.graphics.pdf.PdfRenderer(fd).use { it.pageCount } }
-    }.getOrDefault(0) } }
+    val pageCount by produceState<Result<Int>?>(null, file) {
+        value = withContext(Dispatchers.IO) { runCatching {
+            android.os.ParcelFileDescriptor.open(file, android.os.ParcelFileDescriptor.MODE_READ_ONLY).use { fd ->
+                android.graphics.pdf.PdfRenderer(fd).use { it.pageCount }
+            }
+        } }
+    }
+    if (pageCount == null) LinearProgressIndicator(Modifier.fillMaxWidth())
+    if (pageCount?.isFailure == true) Text("El archivo recibido no es un PDF válido o está protegido.")
+    val pages = pageCount?.getOrNull() ?: 0
     // Nested LazyColumns must have a bounded height inside the document sheet.
     androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().height(480.dp)) {
         items(pages) { index ->

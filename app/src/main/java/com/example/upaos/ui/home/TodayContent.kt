@@ -1,23 +1,17 @@
 package com.example.upaos.ui.home
 
-import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.upaos.data.agenda.*
 import com.example.upaos.data.model.*
-import com.example.upaos.service.AgendaReminderWorker
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -60,7 +54,7 @@ fun nextClass(courses: List<HorarioCurso>, now: Long): NextClass? {
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-fun TodayContent(token: String, dashboard: DashboardViewModel, usuario: String?, onSchedule: () -> Unit, onCanvas: () -> Unit, onNotifications: () -> Unit,
+fun TodayContent(token: String, dashboard: DashboardViewModel, usuario: String?, onSchedule: () -> Unit, onConnectCanvas: () -> Unit, onNotifications: () -> Unit,
                  openAgenda: Boolean = false, onAgendaOpened: () -> Unit = {}) {
     if (usuario.isNullOrBlank()) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
@@ -69,19 +63,17 @@ fun TodayContent(token: String, dashboard: DashboardViewModel, usuario: String?,
         }
         return
     }
-    val context = LocalContext.current
+    val tasks = rememberTodayTasks(usuario, token)
+    var allTasks by rememberSaveable(usuario, token) { mutableStateOf(false) }
     val shared by dashboard.state.collectAsState()
     LaunchedEffect(openAgenda) { if (openAgenda) onAgendaOpened() }
-    val items = shared.agenda
     val timetable = shared.schedules[shared.currentPeriod]
     val notices = shared.notices?.notificaciones ?: emptyList()
-    val agendaTime = shared.times["agenda_$usuario"]
     val scheduleTime = shared.times[dashboard.scheduleCacheKey(shared.currentPeriod)]
     val noticesTime = shared.times["notificaciones_$usuario"]
-    val agendaFresh = "agenda_$usuario" in shared.fresh
     val scheduleFresh = dashboard.scheduleCacheKey(shared.currentPeriod) in shared.fresh
     val noticesFresh = "notificaciones_$usuario" in shared.fresh
-    val error = listOfNotNull(shared.errors["agenda_$usuario"], shared.errors[dashboard.scheduleCacheKey(shared.currentPeriod)], shared.errors["notificaciones_$usuario"]).joinToString("\n").takeIf { it.isNotBlank() }
+    val error = listOfNotNull(shared.errors[dashboard.scheduleCacheKey(shared.currentPeriod)], shared.errors["notificaciones_$usuario"]).joinToString("\n").takeIf { it.isNotBlank() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle) {
@@ -95,18 +87,21 @@ fun TodayContent(token: String, dashboard: DashboardViewModel, usuario: String?,
         }
     }
     val dayClasses = remember(timetable, now) { classesToday(timetable?.listaCursos ?: emptyList(), now) }
-    val dayTasks = remember(items, now) { assignmentsToday(items, now) }
     val dayNotices = remember(notices, now) { notificationsToday(notices, now) }
     var showDetails by remember { mutableStateOf(false) }
+    if (allTasks) {
+        AllPendingTasks(tasks, now, onConnectCanvas) { allTasks = false }
+        return
+    }
     LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             TodayHero(
                 now = now,
                 classes = if (timetable != null) dayClasses.size else null,
-                tasks = if (agendaTime != null) dayTasks.size else null,
+                tasks = tasks.snapshot?.takeUnless { it.partial }?.let { visiblePendingTasks(it.tasks, java.time.Instant.ofEpochMilli(now)).size },
                 news = if (noticesTime != null) dayNotices.size else null,
                 onSchedule = onSchedule,
-                onCanvas = onCanvas,
+                onTasks = { allTasks = true },
                 onNotifications = onNotifications
             )
         }
@@ -125,11 +120,6 @@ fun TodayContent(token: String, dashboard: DashboardViewModel, usuario: String?,
         if (dayClasses.isNotEmpty()) {
             item { TodaySchedule(dayClasses, timetable != null, now, scheduleTime, scheduleFresh, onSchedule) }
         }
-        if (dayTasks.isNotEmpty()) {
-            item {
-                TodayAssignments(dayTasks, now, agendaTime, agendaFresh, onCanvas)
-            }
-        }
         if (dayNotices.isNotEmpty()) {
             item {
                 TodayNewsCard(
@@ -141,5 +131,6 @@ fun TodayContent(token: String, dashboard: DashboardViewModel, usuario: String?,
                 )
             }
         }
+        item { PendingTasksPreview(tasks, now, onConnectCanvas) { allTasks = true } }
     }
 }

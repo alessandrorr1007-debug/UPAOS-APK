@@ -1,5 +1,6 @@
 package com.example.upaos.ui.home
 import com.example.upaos.ui.components.CampusTopBar
+import androidx.activity.compose.BackHandler
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
@@ -14,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.EventAvailable
@@ -50,6 +52,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,9 +62,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.upaos.data.local.TokenManager
 import com.example.upaos.ui.asistencia.AsistenciaContent
-import com.example.upaos.ui.canvas.CanvasContent
 import com.example.upaos.ui.grades.GradesContent
 import com.example.upaos.ui.horario.HorarioContent
+import com.example.upaos.ui.payments.PaymentsHome
+import com.example.upaos.ui.payments.PaymentsScreen
+import com.example.upaos.ui.payments.PaymentsTopBar
+import com.example.upaos.ui.payments.rememberPaymentsViewModel
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import kotlinx.coroutines.launch
 
@@ -93,6 +99,7 @@ fun HomeScreen(
     onSwitchAccount: () -> Unit = onLogout,
     onOpenCalculator: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenIntegrations: () -> Unit,
     profileName: String? = null,
     profileFirstName: String? = null,
     onOpenProfile: () -> Unit = {},
@@ -124,6 +131,27 @@ fun HomeScreen(
     }
 
     val usuario = tokenManager.getSavedUser()
+    val session = remember(usuario, token) { tokenManager.getSessionId() }
+    var accountOpen by rememberSaveable(session) { mutableStateOf(false) }
+    var previousPage by rememberSaveable(session) { mutableIntStateOf(4) }
+    val showingPayments = pagerState.currentPage == 4
+    val showingAccount = showingPayments && accountOpen
+    val paymentsModel = if (showingAccount && session != null && usuario != null) {
+        rememberPaymentsViewModel(usuario, session)
+    } else null
+    val paymentsState = paymentsModel?.state?.collectAsState()?.value
+
+    fun openPayments() {
+        if (!showingPayments) previousPage = pagerState.currentPage
+        coroutineScope.launch { pagerState.scrollToPage(4) }
+    }
+
+    fun leavePayments() {
+        val destination = previousPage
+        accountOpen = false
+        coroutineScope.launch { pagerState.scrollToPage(destination) }
+    }
+
     val savedAccount = remember(usuario) { tokenManager.getCuentas().firstOrNull { it.usuario == usuario } }
     val cachedProfile = remember(usuario) {
         usuario?.let { u ->
@@ -161,6 +189,7 @@ fun HomeScreen(
     }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    BackHandler(enabled = showingPayments && drawerState.isClosed) { if (showingAccount) accountOpen = false else leavePayments() }
     var showAboutDialog by remember { mutableStateOf(false) }
     val appVersion = remember { com.example.upaos.util.AppUpdater.getCurrentVersionName(context) }
 
@@ -219,6 +248,14 @@ fun HomeScreen(
                     icon = { Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(22.dp)) },
                     selected = false,
                     onClick = { coroutineScope.launch { drawerState.close(); onOpenProfile() } },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Estado de cuenta", fontWeight = FontWeight.Medium) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(22.dp)) },
+                    selected = false,
+                    onClick = { coroutineScope.launch { drawerState.close(); openPayments() } },
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
                 )
 
@@ -294,7 +331,13 @@ fun HomeScreen(
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                CampusTopBar(
+                if (showingAccount) {
+                    PaymentsTopBar(
+                        onBack = { accountOpen = false },
+                        onRefresh = paymentsModel?.let { it::refresh },
+                        refreshing = paymentsState?.loading == true
+                    )
+                } else CampusTopBar(
                     navigationIcon = {
                         IconButton(
                             onClick = {
@@ -318,7 +361,7 @@ fun HomeScreen(
                                 1 -> "Mis Cursos"
                                 2 -> "Horario"
                                 3 -> "Asistencia"
-                                else -> "Canvas LMS"
+                                else -> "Pagos"
                             },
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
@@ -374,6 +417,7 @@ fun HomeScreen(
                 )
             },
             bottomBar = {
+                if (!showingAccount) {
                 val navBarColors = NavigationBarItemDefaults.colors(
                     indicatorColor = MaterialTheme.colorScheme.primary,
                     selectedIconColor = MaterialTheme.colorScheme.onPrimary,
@@ -429,13 +473,12 @@ fun HomeScreen(
                     )
                     NavigationBarItem(
                         selected = pagerState.currentPage == 4,
-                        onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(4) }
-                        },
-                        icon = { CampusNavigationIcon(pagerState.currentPage == 4, Icons.AutoMirrored.Filled.Assignment, Icons.Outlined.Assignment) },
-                        label = { Text("Canvas", fontSize = 10.sp, maxLines = 1, softWrap = false) },
+                        onClick = ::openPayments,
+                        icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, null, Modifier.size(22.dp)) },
+                        label = { Text("Pagos", fontSize = 10.sp, maxLines = 1, softWrap = false) },
                         colors = navBarColors
                     )
+                }
                 }
                 }
             }
@@ -488,16 +531,17 @@ fun HomeScreen(
             }
             HorizontalPager(
                 state = pagerState,
+                userScrollEnabled = !showingAccount,
                 beyondViewportPageCount = 2,
                 modifier = Modifier
                     .fillMaxSize()
                     .weight(1f)
             ) { page ->
                 when (page) {
-                    0 -> TodayContent(token, dashboard, usuario,
+                    0 -> if (pagerState.currentPage == 0) TodayContent(token, dashboard, usuario,
                         openAgenda = openAgenda, onAgendaOpened = onAgendaOpened,
                         onSchedule = { coroutineScope.launch { pagerState.animateScrollToPage(2) } },
-                        onCanvas = { coroutineScope.launch { pagerState.animateScrollToPage(4) } },
+                        onConnectCanvas = onOpenIntegrations,
                         onNotifications = onOpenNotifications)
                     1 -> GradesContent(
                         token = token,
@@ -517,10 +561,13 @@ fun HomeScreen(
                         dashboard = dashboard,
                         usuario = usuario
                     )
-                    else -> CanvasContent(
-                        token = token,
-                        usuario = usuario
-                    )
+                    else -> if (!accountOpen) {
+                        PaymentsHome(onOpenAccount = { accountOpen = true })
+                    } else if (paymentsModel != null && paymentsState != null) {
+                        PaymentsScreen(paymentsModel, paymentsState, onReauthenticate = ::cerrarSesion)
+                    } else if (showingPayments) {
+                        Text("Inicia sesión para consultar Estado de cuenta.", modifier = Modifier.padding(16.dp))
+                    }
                 }
             }
         }

@@ -70,6 +70,32 @@ class CanvasViewModelTest {
         assertFalse(vm.state.value.refreshing)
     }
 
+    @Test fun automaticRefreshNeverRestoresBlockingLoaderAfterDataIsVisible() = runTest {
+        var next = CompletableDeferred<List<Int>>()
+        val vm = CanvasResourceViewModel(CanvasResourceRepository { next.await() }, emptyList<Int>())
+        runCurrent()
+        assertTrue(vm.state.value.loading)
+        next.complete(listOf(7)); runCurrent()
+        next = CompletableDeferred()
+        vm.refresh(); runCurrent()
+        assertEquals(listOf(7), vm.state.value.data)
+        assertFalse(vm.state.value.loading)
+        assertTrue(vm.state.value.refreshing)
+        next.completeExceptionally(IOException("offline")); runCurrent()
+        assertEquals(listOf(7), vm.state.value.data)
+        assertFalse(vm.state.value.loading)
+    }
+
+    @Test fun completeEmptyCacheIsAlsoContentDuringRevalidation() = runTest {
+        val next = CompletableDeferred<List<Int>>()
+        val vm = CanvasResourceViewModel(CanvasResourceRepository { next.await() }, emptyList<Int>(), restore = { emptyList() })
+        runCurrent()
+        assertFalse(vm.state.value.loading)
+        assertTrue(vm.state.value.fromCache)
+        assertTrue(vm.state.value.refreshing)
+        next.complete(emptyList()); runCurrent()
+    }
+
     @Test fun clearingOwnerCancelsWithoutPublishingLateResponse() = runTest {
         var cancelled=false
         val ready=CompletableDeferred<List<Int>>()
@@ -108,6 +134,85 @@ class CanvasViewModelTest {
         assertEquals(listOf(previous),vm.state.value.items)
         assertTrue(vm.state.value.isOffline)
         assertTrue(vm.state.value.refreshFailures.keys.containsAll(listOf("todo","conversations")))
+    }
+
+    private fun hubRepository(cacheStore: CanvasCacheStore, load: suspend () -> RefreshResult<CanvasTodoSnapshot>) =
+        object : CanvasHubRepository {
+            override val cache = cacheStore
+            override fun requireSession() {}
+            override suspend fun courses() = error("Startup must reuse the todo course read")
+            override suspend fun conversations() = emptyList<CanvasConversation>()
+            override suspend fun notifications() = emptyList<CanvasNotificationItem>()
+            override suspend fun groups() = emptyList<CanvasGroup>()
+            override suspend fun todos(previous: List<CanvasTodoItem>) = load()
+        }
+
+    @Test fun hubShowsDiskSnapshotThroughoutSlowRefreshThenPublishesNewSnapshot() = runTest {
+        val cache = MemoryCanvasCache()
+        val old = CanvasTodoItem(type="submitting", courseId=1, assignment=CanvasAssignment(id=10,name="Old"))
+        val next = old.copy(assignment=CanvasAssignment(id=11,name="New"))
+        cache.snapshot = listOf(old)
+        val network = CompletableDeferred<RefreshResult<CanvasTodoSnapshot>>()
+        val vm = CanvasHubViewModel("fixture", "synthetic", hubRepository(cache) { network.await() })
+        runCurrent()
+        assertEquals(listOf(old), vm.state.value.items)
+        assertFalse(vm.state.value.isLoadingTodo)
+        assertEquals(123L, vm.state.value.lastUpdatedMillis)
+        network.complete(RefreshResult.Complete(CanvasTodoSnapshot(listOf(next),
+            listOf(CanvasCourse(id=1,name="Fixture")), mapOf(1L to listOf(next)), setOf(1L))))
+        runCurrent()
+        assertEquals(listOf(next), vm.state.value.items)
+        assertEquals(1, cache.writes)
+    }
+
+    @Test fun hubOfflineRestartRestoresDiskAndDoesNotOverwriteIt() = runTest {
+        val cache = MemoryCanvasCache()
+        val old = CanvasTodoItem(type="submitting", courseId=1, assignment=CanvasAssignment(id=10,name="Old"))
+        cache.snapshot = listOf(old)
+        repeat(2) {
+            val vm = CanvasHubViewModel("fixture", "synthetic", hubRepository(cache) {
+                RefreshResult.Error(RefreshIssue("Canvas", IOException("offline")))
+            })
+            runCurrent()
+            assertEquals(listOf(old), vm.state.value.items)
+            assertTrue(vm.state.value.isOffline)
+            assertEquals(123L, vm.state.value.lastUpdatedMillis)
+        }
+        assertEquals(0, cache.writes)
+    }
+
+    @Test fun hubAcceptsCompleteEmptySnapshotButNotAnErrorAsDeletion() = runTest {
+        val cache = MemoryCanvasCache()
+        cache.snapshot = listOf(CanvasTodoItem(type="submitting", courseId=1, assignment=CanvasAssignment(id=10,name="Old")))
+        val vm = CanvasHubViewModel("fixture", "synthetic", hubRepository(cache) {
+            RefreshResult.Complete(CanvasTodoSnapshot(emptyList(), emptyList(), emptyMap(), emptySet()))
+        })
+        runCurrent()
+        assertTrue(vm.state.value.items.isEmpty())
+        assertTrue(vm.state.value.completeTodoSnapshot)
+        assertEquals(1, cache.writes)
+    }
+
+    @Test fun manualHubFetchWaitsForDiskRestorationAndCoalescesWithStartup() = runTest {
+        val restore = CompletableDeferred<Unit>()
+        val backing = MemoryCanvasCache()
+        val cache = object : CanvasCacheStore by backing {
+            override suspend fun cargar(user: String): Pair<List<CanvasTodoItem>, Long?> {
+                restore.await()
+                return backing.cargar(user)
+            }
+        }
+        var calls = 0
+        val network = CompletableDeferred<RefreshResult<CanvasTodoSnapshot>>()
+        val vm = CanvasHubViewModel("fixture", "synthetic", hubRepository(cache) { calls++; network.await() })
+        vm.fetchTodo(true)
+        runCurrent()
+        assertEquals(0, calls)
+        restore.complete(Unit)
+        runCurrent()
+        assertEquals(1, calls)
+        network.complete(RefreshResult.Complete(CanvasTodoSnapshot(emptyList(), emptyList(), emptyMap(), emptySet())))
+        runCurrent()
     }
 
     @Test fun repositoryRejectsStaleSessionBeforeRequestAndBeforePublishingResponse() = runTest {

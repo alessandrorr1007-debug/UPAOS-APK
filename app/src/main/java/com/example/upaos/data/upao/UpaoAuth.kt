@@ -202,9 +202,12 @@ object UpaoAuth {
     /**
      * Verifica si la sesión actual en Banner SSB está viva con una petición ligera.
      */
-    suspend fun checkSessionAlive(usuario: String): Boolean = withContext(Dispatchers.IO) {
-        val session = UpaoHttpClient.forAccount(usuario)
-        if (session.authenticatedUser != usuario.trim()) return@withContext false
+    suspend fun checkSessionAlive(usuario: String): Boolean =
+        checkSessionAlive(UpaoHttpClient.forAccount(usuario))
+
+    private suspend fun checkSessionAlive(session: UpaoHttpClient.AccountSession): Boolean = withContext(Dispatchers.IO) {
+        session.requireValid()
+        if (session.authenticatedUser != session.user) return@withContext false
         val client = session.client
         try {
             val req = Request.Builder()
@@ -232,19 +235,25 @@ object UpaoAuth {
     /**
      * Garantiza que haya una sesión activa. Si la sesión expiró, realiza re-login protegido con Mutex.
      */
-    suspend fun ensureSession(usuario: String, pass: String): UpaoLoginResult {
-        val session = UpaoHttpClient.forAccount(usuario)
-        if (checkSessionAlive(usuario)) {
+    suspend fun ensureSession(usuario: String, pass: String): UpaoLoginResult =
+        ensureSession(UpaoHttpClient.forAccount(usuario), pass)
+
+    internal suspend fun ensureSession(session: UpaoHttpClient.AccountSession, pass: String): UpaoLoginResult {
+        if (checkSessionAlive(session)) {
             return UpaoLoginResult(success = true)
         }
 
         return session.loginMutex.withLock {
-            if (checkSessionAlive(usuario)) {
+            if (checkSessionAlive(session)) {
                 return@withLock UpaoLoginResult(success = true)
             }
-            loginInSession(usuario, pass, session)
+            loginInSession(session.user, pass, session)
         }
     }
+
+    /** The financial endpoint explicitly rejected the current session. */
+    internal suspend fun renewSession(session: UpaoHttpClient.AccountSession, pass: String): UpaoLoginResult =
+        session.loginMutex.withLock { loginInSession(session.user, pass, session) }
 
     /**
      * Prepara la sesión en inscripcion.upao.edu.pe para consultas de horario y aulas.
