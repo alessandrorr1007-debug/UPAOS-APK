@@ -3,10 +3,11 @@ package com.example.upaos.ui.asistencia
 import com.example.upaos.ui.home.DashboardViewModel
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,6 +47,7 @@ import com.example.upaos.ui.components.SkeletonBox
 import com.example.upaos.ui.components.StatusBadge
 import com.example.upaos.ui.components.courseAccent
 import com.example.upaos.ui.components.toTitleCase
+import com.example.upaos.ui.theme.LocalUpaoDarkTheme
 import com.example.upaos.ui.theme.UpaoAmber
 import com.example.upaos.ui.theme.UpaoBlue
 import com.example.upaos.ui.theme.UpaoGreen
@@ -407,75 +409,91 @@ fun AsistenciaContent(
         procesarCursosAsistencia(registros, horarioCursos, semanaActual, selectedPeriodo)
     }
 
-    Column(
+    val isDark = LocalUpaoDarkTheme.current
+    val palette = remember(isDark) { attendanceThemePalette(isDark) }
+    val periodos = remember(shared.periods, selectedPeriodo) {
+        shared.periods.ifEmpty { listOfNotNull(selectedPeriodo.takeIf { it.isNotBlank() }) }
+    }
+    val semanaCiclo = remember(selectedPeriodo, semanaActual) {
+        obtenerSemanaCiclo(selectedPeriodo, semanaActual)
+    }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp)
+            .background(palette.background)
     ) {
-        if (offline || isLoading || isRefreshing) {
-            com.example.upaos.ui.home.Freshness(shared.times[claveCache], !offline, isLoading || isRefreshing)
-            Spacer(modifier = Modifier.height(4.dp))
-        }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            AttendanceHeaderBar(
+                periodo = selectedPeriodo,
+                periodos = periodos,
+                semanaCiclo = semanaCiclo,
+                palette = palette,
+                onSelectPeriodo = { dashboard.selectAttendance(it) }
+            )
 
-        if (offline && (registros.isNotEmpty() || horarioCursos.isNotEmpty())) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp)
-            ) {
-                Text(
-                    text = "Datos guardados · pendiente de actualizar",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (offline || isLoading || isRefreshing) {
+                com.example.upaos.ui.home.Freshness(shared.times[claveCache], !offline, isLoading || isRefreshing)
+                Spacer(modifier = Modifier.height(4.dp))
             }
-        }
 
-        when {
-            isLoading && cursosVisibles.isEmpty() -> {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            if (offline && (registros.isNotEmpty() || horarioCursos.isNotEmpty())) {
+                Surface(
+                    color = palette.surface,
+                    border = BorderStroke(1.dp, palette.border),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
                 ) {
-                    repeat(3) { SkeletonAsistenciaCard() }
-                }
-            }
-            errorMessage != null && cursosVisibles.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    ErrorView(
-                        message = errorMessage!!,
-                        onRetry = { load() },
-                        modifier = Modifier.align(Alignment.Center)
+                    Text(
+                        text = "Datos guardados · pendiente de actualizar",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.textSecondary,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                     )
                 }
             }
-            cursosVisibles.isNotEmpty() -> {
-                val conDatos = cursosVisibles.filter { it.porcentaje != null }
-                val sinDatos = cursosVisibles.filter { it.porcentaje == null }
-                val enRiesgo = conDatos.filter { (it.porcentaje ?: 0.0) < 70.0 }
-                val semanaCiclo = obtenerSemanaCiclo(selectedPeriodo, semanaActual)
 
-                Column(modifier = Modifier.fillMaxSize()) {
-                    ResumenAsistencia(
-                        semanaCiclo = semanaCiclo,
-                        periodo = selectedPeriodo
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+            when {
+                isLoading && cursosVisibles.isEmpty() -> {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        repeat(4) { SkeletonAsistenciaCard(palette = palette) }
+                    }
+                }
+                errorMessage != null && cursosVisibles.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        ErrorView(
+                            message = errorMessage!!,
+                            onRetry = { load() },
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
+                cursosVisibles.isNotEmpty() -> {
+                    val conDatos = cursosVisibles.filter { it.porcentaje != null }
+                    val sinDatos = cursosVisibles.filter { it.porcentaje == null }
+                    val enRiesgo = conDatos.filter { (it.porcentaje ?: 0.0) < 70.0 }
+
                     RefreshableContent(
                         isRefreshing = isRefreshing,
-                        onRefresh = {
-                            load()
-                        },
+                        onRefresh = { load() },
                         modifier = Modifier.weight(1f)
                     ) {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 24.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             if (conDatos.isNotEmpty()) {
                                 val resto = conDatos.filterNot { it in enRiesgo }
@@ -487,8 +505,15 @@ fun AsistenciaContent(
                                             modifier = Modifier.padding(vertical = 2.dp)
                                         )
                                     }
-                                    items(enRiesgo) { curso ->
-                                        AsistenciaCard(item = curso, onClick = { cursoSeleccionado = curso })
+                                    itemsIndexed(
+                                        items = enRiesgo,
+                                        key = { index, curso -> "${curso.crn ?: ""}_${curso.displayNombre}_risk_$index" }
+                                    ) { index, curso ->
+                                        AsistenciaCard(
+                                            item = curso,
+                                            index = index,
+                                            onClick = { cursoSeleccionado = curso }
+                                        )
                                     }
                                     if (resto.isNotEmpty()) {
                                         item {
@@ -500,8 +525,15 @@ fun AsistenciaContent(
                                     }
                                 }
                                 if (resto.isNotEmpty()) {
-                                    items(resto) { curso ->
-                                        AsistenciaCard(item = curso, onClick = { cursoSeleccionado = curso })
+                                    itemsIndexed(
+                                        items = resto,
+                                        key = { index, curso -> "${curso.crn ?: ""}_${curso.displayNombre}_$index" }
+                                    ) { index, curso ->
+                                        AsistenciaCard(
+                                            item = curso,
+                                            index = index + enRiesgo.size,
+                                            onClick = { cursoSeleccionado = curso }
+                                        )
                                     }
                                 }
                             }
@@ -513,21 +545,29 @@ fun AsistenciaContent(
                                         modifier = Modifier.padding(vertical = 2.dp)
                                     )
                                 }
-                                items(sinDatos) { curso ->
-                                    AsistenciaCard(item = curso, sinDatos = true, onClick = { cursoSeleccionado = curso })
+                                itemsIndexed(
+                                    items = sinDatos,
+                                    key = { index, curso -> "${curso.crn ?: ""}_${curso.displayNombre}_nodata_$index" }
+                                ) { index, curso ->
+                                    AsistenciaCard(
+                                        item = curso,
+                                        sinDatos = true,
+                                        index = index + conDatos.size,
+                                        onClick = { cursoSeleccionado = curso }
+                                    )
                                 }
                             }
                         }
                     }
                 }
-            }
-            else -> {
-                EmptyState(
-                    icon = Icons.Filled.Schedule,
-                    title = "Sin datos de asistencia",
-                    subtitle = "No hay datos de asistencia para este periodo.",
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
+                else -> {
+                    EmptyState(
+                        icon = Icons.Filled.Schedule,
+                        title = "Sin datos de asistencia",
+                        subtitle = "No hay datos de asistencia para este periodo.",
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
             }
         }
     }
@@ -537,55 +577,6 @@ fun AsistenciaContent(
             curso = curso,
             onDismiss = { cursoSeleccionado = null }
         )
-    }
-}
-
-@Composable
-private fun ResumenAsistencia(
-    semanaCiclo: Int = 2,
-    periodo: String
-) {
-    AppCard(
-        color = MaterialTheme.colorScheme.surface,
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-        corner = 20.dp,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Filled.Schedule,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Column {
-                    Text(
-                        text = "Periodo $periodo",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            ) {
-                Text(
-                    text = if (semanaCiclo > 0) "Semana $semanaCiclo/${AcademicCalendar.TOTAL_SEMANAS_REGULARES}" else "Sin semana activa",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
-            }
-        }
     }
 }
 
@@ -619,100 +610,55 @@ private fun StatChip(label: String, value: String, color: Color) {
 fun AsistenciaCard(
     item: AsistenciaCurso,
     sinDatos: Boolean = false,
+    index: Int = 0,
     onClick: (() -> Unit)? = null
 ) {
+    val isDark = LocalUpaoDarkTheme.current
+    val palette = remember(isDark) { attendanceThemePalette(isDark) }
     val tieneRegistro = item.tieneRegistroAsistencia && !sinDatos
     val pct = item.porcentaje?.takeIf { it.isFinite() }
-    val color = com.example.upaos.ui.theme.campusAccent(porcentajeColor(pct, tieneRegistro))
     val faltas = item.totalFaltasCalculadas
-    val absenceColor = if (faltas > 0) MaterialTheme.colorScheme.error else com.example.upaos.ui.theme.campusSuccess
     val activos = diasActivos(item.horarioDias)
-    val days = activos.sorted().joinToString(" · ") { dayNames[it].lowercase().replaceFirstChar { it.uppercase() } }
-    val progress by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = if (tieneRegistro && pct != null) (pct / 100.0).toFloat().coerceIn(0f, 1f) else 0f,
-        animationSpec = androidx.compose.animation.core.tween(350), label = "attendanceProgress"
-    )
+    val days = activos.sorted().joinToString(" · ") { dayNames[it].lowercase().replaceFirstChar { c -> c.uppercase() } }
+    val formattedPct = if (tieneRegistro && pct != null) formatPct(pct) else "—"
 
-    AppCard(
-        color = MaterialTheme.colorScheme.surface,
-        corner = 16.dp,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-        onClick = onClick,
+    AttendanceModernCourseCard(
+        courseName = toTitleCase(item.displayNombre),
+        crn = item.crn,
+        daysText = days,
+        pct = pct,
+        formattedPct = formattedPct,
+        tieneRegistro = tieneRegistro,
+        faltas = faltas,
+        palette = palette,
+        index = index,
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun SkeletonAsistenciaCard(palette: AttendanceThemePalette) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = palette.surface,
+        border = BorderStroke(1.dp, palette.border),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = toTitleCase(item.displayNombre),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 2,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    if (days.isNotBlank()) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Filled.Schedule, null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(days, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        text = if (tieneRegistro && pct != null) "${formatPct(pct)}%" else "—",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = color
-                    )
-                    Text("Asistencia", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SkeletonBox(modifier = Modifier.size(46.dp), corner = 14.dp)
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                SkeletonBox(modifier = Modifier.fillMaxWidth(0.72f).height(14.dp), corner = 7.dp)
+                Spacer(modifier = Modifier.height(6.dp))
+                SkeletonBox(modifier = Modifier.fillMaxWidth(0.42f).height(10.dp), corner = 5.dp)
+                Spacer(modifier = Modifier.height(10.dp))
+                SkeletonBox(modifier = Modifier.fillMaxWidth().height(5.dp), corner = 3.dp)
             }
-            if (tieneRegistro && pct != null) {
-                LinearProgressIndicator(
-                    progress = { progress }, color = color,
-                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp))
-                )
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Surface(
-                    shape = RoundedCornerShape(7.dp),
-                    color = if (tieneRegistro) absenceColor.copy(alpha = .10f) else MaterialTheme.colorScheme.surfaceContainerHigh
-                ) {
-                    Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(
-                            if (tieneRegistro && faltas > 0) Icons.Filled.Cancel else if (tieneRegistro) Icons.Filled.CheckCircle else Icons.Filled.Schedule,
-                            null, Modifier.size(13.dp), tint = if (tieneRegistro) absenceColor else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            if (!tieneRegistro) "Sin registro" else if (faltas == 1) "1 falta" else "$faltas faltas",
-                            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold,
-                            color = if (tieneRegistro) absenceColor else MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(Modifier.weight(1f))
-                if (onClick != null) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("Ver desglose", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-@Composable
-private fun SkeletonAsistenciaCard() {
-    AppCard(corner = 20.dp, contentPadding = PaddingValues(10.dp)) {
-        Column {
-            SkeletonBox(modifier = Modifier.fillMaxWidth(0.7f).height(14.dp), corner = 7.dp)
-            Spacer(modifier = Modifier.height(6.dp))
-            SkeletonBox(modifier = Modifier.fillMaxWidth(0.45f).height(10.dp), corner = 5.dp)
-            Spacer(modifier = Modifier.height(8.dp))
-            SkeletonBox(modifier = Modifier.fillMaxWidth().height(8.dp), corner = 4.dp)
         }
     }
 }

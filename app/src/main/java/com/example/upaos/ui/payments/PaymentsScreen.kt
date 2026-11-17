@@ -3,6 +3,7 @@ package com.example.upaos.ui.payments
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,8 +13,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.FormatListBulleted
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Layers
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -23,104 +34,217 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.upaos.data.payments.*
 import com.example.upaos.ui.theme.LocalUpaoDarkTheme
 
-private val panel = RoundedCornerShape(18.dp)
-private val inner = RoundedCornerShape(13.dp)
-
-private data class PaymentColors(
-    val background: Color, val surface: Color, val border: Color, val header: Color,
-    val blue: Color, val accent: Color, val tint: Color, val green: Color, val greenTint: Color,
-    val heroStart: Color, val heroEnd: Color
-)
-
-@Composable
-private fun paymentColors(): PaymentColors = if (LocalUpaoDarkTheme.current) {
-    PaymentColors(
-        Color(0xFF050B17), Color(0xFF101C31), Color(0xFF273A56), Color(0xFF061A3B),
-        Color(0xFF075ADC), Color(0xFF9BC9FF), Color(0xFF142A50), Color(0xFF77E5A0),
-        Color(0xFF10362F), Color(0xFF092A66), Color(0xFF071B3B)
-    )
-} else {
-    PaymentColors(
-        Color(0xFFF7F9FC), Color.White, Color(0xFFDFE6F1), Color(0xFF073B87),
-        Color(0xFF0754C9), Color(0xFF0754C9), Color(0xFFE4EEFF), Color(0xFF146C35),
-        Color(0xFFE2F8EB), Color(0xFF0759CE), Color(0xFF084895)
-    )
-}
+private val CardRadius = RoundedCornerShape(20.dp)
+private val SubCardRadius = RoundedCornerShape(16.dp)
+private val IconBoxRadius = RoundedCornerShape(13.dp)
 
 @Composable
 internal fun PaymentsHome(onOpenAccount: () -> Unit) {
-    val colors = paymentColors()
+    val palette = paymentsPalette(LocalUpaoDarkTheme.current)
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(colors.background),
-        contentPadding = PaddingValues(bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = Modifier
+            .fillMaxSize()
+            .background(palette.background),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item {
-            Row(
-                Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(colors.heroStart, colors.heroEnd)))
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Text(
-                    "Estado de cuenta y pagos universitarios",
-                    modifier = Modifier.weight(1f),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    text = "Pagos",
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = palette.textPrimary
                 )
-                Icon(Icons.Outlined.CreditCard, null, Modifier.size(32.dp), tint = Color(0xFFB9D8FF))
+                Text(
+                    text = "Estado de cuenta y pagos universitarios",
+                    fontSize = 13.5.sp,
+                    color = palette.textSecondary
+                )
             }
         }
+
         item {
-            Surface(onClick = onOpenAccount, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                shape = panel, color = colors.surface, border = BorderStroke(1.dp, colors.border), shadowElevation = 2.dp) {
-                EntryRow(Icons.AutoMirrored.Outlined.ReceiptLong, "Estado de cuenta", "Consulta tu resumen, periodos y movimientos") {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
-                }
+            Surface(
+                onClick = onOpenAccount,
+                shape = CardRadius,
+                color = palette.surface,
+                border = BorderStroke(1.dp, palette.border),
+                shadowElevation = if (palette.isDark) 0.dp else 1.5.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .defaultMinSize(minHeight = 48.dp)
+                    .testTag("payments_entry_account")
+            ) {
+                EntryRow(
+                    icon = Icons.Outlined.EventAvailable,
+                    title = "Estado de cuenta",
+                    description = "Consulta tu resumen, períodos y movimientos",
+                    palette = palette,
+                    solidIconBadge = true,
+                    showArrow = true
+                )
             }
         }
+
         item {
-            Surface(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = panel,
-                color = colors.surface, border = BorderStroke(1.dp, colors.border), shadowElevation = 2.dp) {
-                EntryRow(Icons.Outlined.Description, "Constancias y otros", "Constancias de pago, boletas y más", upcoming = true)
+            Surface(
+                shape = CardRadius,
+                color = palette.surface,
+                border = BorderStroke(1.dp, palette.border),
+                shadowElevation = if (palette.isDark) 0.dp else 1.5.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("payments_entry_certificates")
+            ) {
+                EntryRow(
+                    icon = Icons.Outlined.Description,
+                    title = "Constancias y otros",
+                    description = "Constancias de pago, boletas y más",
+                    palette = palette,
+                    solidIconBadge = false,
+                    upcoming = true,
+                    showArrow = false
+                )
             }
         }
     }
 }
 
 @Composable
-private fun EntryRow(icon: ImageVector, title: String, description: String, upcoming: Boolean = false,
-    action: (@Composable () -> Unit)? = null) {
-    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        BadgeIcon(icon)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (upcoming) Text("Próximamente", Modifier.background(paymentColors().tint, inner).padding(horizontal = 9.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelMedium, color = paymentColors().accent)
+private fun EntryRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+    palette: PaymentsPalette,
+    solidIconBadge: Boolean,
+    upcoming: Boolean = false,
+    showArrow: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(IconBoxRadius)
+                .background(if (solidIconBadge) palette.accentBlue else palette.softBlueBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (solidIconBadge) Color.White else palette.softBlueText,
+                modifier = Modifier.size(23.dp)
+            )
         }
-        action?.invoke()
+
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 15.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = palette.textPrimary
+            )
+            Text(
+                text = description,
+                fontSize = 12.5.sp,
+                lineHeight = 17.sp,
+                color = palette.textSecondary
+            )
+            if (upcoming) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = palette.softBlueBg,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(
+                        text = "Próximamente",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.softBlueText,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                    )
+                }
+            }
+        }
+
+        if (showArrow) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = palette.textMuted,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PaymentsTopBar(onBack: () -> Unit, onRefresh: (() -> Unit)?, refreshing: Boolean) {
+    val palette = paymentsPalette(LocalUpaoDarkTheme.current)
     TopAppBar(
-        title = { Text("Estado de cuenta", fontWeight = FontWeight.Bold) },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = paymentColors().header,
-            titleContentColor = Color.White, navigationIconContentColor = Color.White, actionIconContentColor = Color.White),
-        navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver") } },
-        actions = { IconButton(onClick = { onRefresh?.invoke() }, enabled = onRefresh != null && !refreshing) {
-            Icon(Icons.Outlined.Refresh, "Actualizar estado de cuenta")
-        } }
+        title = {
+            Text(
+                text = "Estado de cuenta",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = palette.textPrimary
+            )
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = palette.background,
+            titleContentColor = palette.textPrimary,
+            navigationIconContentColor = palette.textPrimary,
+            actionIconContentColor = palette.textPrimary
+        ),
+        navigationIcon = {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.testTag("payments_back_button")
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Volver"
+                )
+            }
+        },
+        actions = {
+            IconButton(
+                onClick = { onRefresh?.invoke() },
+                enabled = onRefresh != null && !refreshing,
+                modifier = Modifier.testTag("payments_refresh_button")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Refresh,
+                    contentDescription = "Actualizar estado de cuenta"
+                )
+            }
+        }
     )
 }
 
@@ -133,226 +257,752 @@ internal fun PaymentsScreen(model: PaymentsViewModel, state: PaymentsState, onRe
     PaymentsContent(state, model::selectPeriod, model::refresh, onReauthenticate)
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun PaymentsContent(state: PaymentsState, onSelectPeriod: (PaymentPeriod) -> Unit, onRetry: () -> Unit, onReauthenticate: () -> Unit) {
+internal fun PaymentsContent(
+    state: PaymentsState,
+    onSelectPeriod: (PaymentPeriod) -> Unit,
+    onRetry: () -> Unit,
+    onReauthenticate: () -> Unit
+) {
     var academic by rememberSaveable { mutableStateOf(false) }
     var expandedHistory by rememberSaveable { mutableStateOf(false) }
+    var selectedMovement by remember { mutableStateOf<PaymentMovement?>(null) }
+
     val overview = state.overview
     val period = state.period
     val allTerms = period == null || period.code == ALL_TERMS
     val general = state.general ?: state.movements.takeIf { allTerms }
-    val colors = paymentColors()
+    val palette = paymentsPalette(LocalUpaoDarkTheme.current)
 
-    Column(Modifier.fillMaxSize().background(colors.background)) {
-        AccountTabs(academic) { academic = it }
-        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(palette.background)
+    ) {
+        AccountTabs(academic = academic, palette = palette) { academic = it }
+
+        if (state.loading) {
+            LinearProgressIndicator(
+                color = palette.accentBlue,
+                trackColor = palette.border,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.5.dp)
+            )
+        }
+
         key(academic) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (state.loading && (overview == null || academic)) {
-                    item { Text("Consultando estado de cuenta…", style = MaterialTheme.typography.bodyMedium) }
+                    item {
+                        Text(
+                            text = "Consultando estado de cuenta…",
+                            fontSize = 13.5.sp,
+                            color = palette.textSecondary,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
                 }
+
                 state.error?.let { error ->
-                    if (academic || overview == null || general == null) item {
-                        MessagePanel(Icons.Outlined.Info, error.message) {
-                            TextButton(onClick = onRetry) { Text("Reintentar") }
-                            if (error == PaymentError.EXPIRED) TextButton(onClick = onReauthenticate) { Text("Volver a iniciar sesión") }
-                        }
-                    }
-                }
-                if (overview != null && !academic) {
-                    item { BalanceHero("Saldo total", overview.balance, overview.date) }
-                    item {
-                        PaymentPanel {
-                            Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically) {
-                                BadgeIcon(Icons.Outlined.AccountBalanceWallet)
-                                Column(Modifier.weight(1f)) {
-                                    Text("Importe pendiente", style = MaterialTheme.typography.labelLarge)
-                                    Text(overview.due ?: "Importe no disponible", style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
-                    }
-                    general?.totals?.let { item { Metrics(it) } }
-                    item { SectionTitle("Movimientos generales") }
-                    val rows = general?.items.orEmpty()
-                    if (rows.isEmpty() && !state.loading && state.error == null) {
-                        item { MessagePanel(Icons.AutoMirrored.Outlined.ReceiptLong, "No hay movimientos en la cuenta.") }
-                    }
-                    items(if (expandedHistory) rows else rows.take(3)) { MovementRow(it) }
-                    if (rows.size > 3) item {
-                        OutlinedButton(onClick = { expandedHistory = !expandedHistory }, Modifier.fillMaxWidth()) {
-                            Text(if (expandedHistory) "Mostrar menos movimientos" else "Ver todos los movimientos")
-                        }
-                    }
-                    item {
-                        PaymentPanel {
-                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                overview.currency?.let { Text("Moneda · $it") }
-                                Text(when (val holds = overview.holds) {
-                                    null -> "Retenciones · Sin información"
-                                    0 -> "Sin retenciones"
-                                    else -> "Retenciones · $holds"
-                                })
-                            }
-                        }
-                    }
-                }
-                if (overview != null && academic) {
-                    val terms = overview.periods.filter { it.code != ALL_TERMS }
-                    if (overview.periods.isNotEmpty()) item { TermSelector(overview.periods, period, onSelectPeriod) }
-                    if (allTerms) {
-                        item { BalanceHero("Saldo de todos los periodos", overview.balance) }
-                        item { SectionTitle("Periodos académicos") }
-                        if (terms.isEmpty()) item { MessagePanel(Icons.Outlined.CalendarToday, "No hay periodos disponibles.") }
-                        if (terms.isNotEmpty()) item {
-                            PaymentPanel {
-                                Column {
-                                    terms.forEachIndexed { index, term ->
-                                        if (index > 0) HorizontalDivider(color = colors.border)
-                                        Surface(onClick = { onSelectPeriod(term) }, color = colors.surface) {
-                                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                                BadgeIcon(Icons.Outlined.CalendarToday)
-                                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                                    Text(term.label, fontWeight = FontWeight.SemiBold)
-                                                    Text(term.balance ?: "Saldo no disponible", color = colors.accent)
-                                                }
-                                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
-                                            }
-                                        }
+                    if (academic || overview == null || general == null) {
+                        item {
+                            MessagePanel(
+                                icon = Icons.Outlined.Info,
+                                message = error.message,
+                                palette = palette
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(onClick = onRetry) { Text("Reintentar") }
+                                    if (error == PaymentError.EXPIRED) {
+                                        TextButton(onClick = onReauthenticate) { Text("Volver a iniciar sesión") }
                                     }
                                 }
                             }
                         }
+                    }
+                }
+
+                if (overview != null && !academic) {
+                    item {
+                        BalanceHero(
+                            title = "Saldo total",
+                            amount = overview.balance,
+                            date = overview.date,
+                            palette = palette
+                        )
+                    }
+
+                    item {
+                        DueAmountCard(
+                            due = overview.due,
+                            currency = overview.currency,
+                            holds = overview.holds,
+                            palette = palette
+                        )
+                    }
+
+                    general?.totals?.let { totals ->
+                        item { Metrics(totals = totals, palette = palette) }
+                    }
+
+                    val rows = general?.items.orEmpty()
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            SectionTitle("Movimientos generales", palette)
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.FormatListBulleted,
+                                contentDescription = null,
+                                tint = palette.textMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    if (rows.isEmpty() && !state.loading && state.error == null) {
+                        item {
+                            MessagePanel(
+                                icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                                message = "No hay movimientos en la cuenta.",
+                                palette = palette
+                            )
+                        }
+                    }
+
+                    items(if (expandedHistory) rows else rows.take(3)) { movement ->
+                        MovementRow(
+                            movement = movement,
+                            palette = palette,
+                            onClick = { selectedMovement = movement }
+                        )
+                    }
+
+                    if (rows.size > 3) {
+                        item {
+                            OutlinedButton(
+                                onClick = { expandedHistory = !expandedHistory },
+                                shape = SubCardRadius,
+                                border = BorderStroke(1.dp, palette.border),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = palette.surface,
+                                    contentColor = palette.accentBlue
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("payments_toggle_movements")
+                            ) {
+                                Text(
+                                    text = if (expandedHistory) "Mostrar menos movimientos" else "Ver todos los movimientos (${rows.size})",
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.5.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (overview != null && academic) {
+                    val terms = overview.periods.filter { it.code != ALL_TERMS }
+                    if (overview.periods.isNotEmpty()) {
+                        item {
+                            TermSelector(
+                                periods = overview.periods,
+                                current = period,
+                                palette = palette,
+                                select = onSelectPeriod
+                            )
+                        }
+                    }
+
+                    if (allTerms) {
+                        item {
+                            CompactBalanceCard(
+                                title = "Saldo de todos los periodos",
+                                amount = overview.balance,
+                                palette = palette
+                            )
+                        }
+                        item {
+                            SectionTitle(
+                                title = "Periodos académicos",
+                                palette = palette,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        if (terms.isEmpty()) {
+                            item {
+                                MessagePanel(
+                                    icon = Icons.Outlined.CalendarToday,
+                                    message = "No hay periodos disponibles.",
+                                    palette = palette
+                                )
+                            }
+                        } else {
+                            items(terms.size) { index ->
+                                val term = terms[index]
+                                PeriodItemCard(
+                                    term = term,
+                                    isCurrent = index == 0,
+                                    palette = palette,
+                                    onClick = { onSelectPeriod(term) }
+                                )
+                            }
+                        }
                     } else {
-                        item { BalanceHero("Saldo del periodo", period.balance, caption = period.label) }
-                        state.movements?.totals?.let { item { Metrics(it) } }
-                        item { SectionTitle("Movimientos del periodo") }
+                        item {
+                            CompactBalanceCard(
+                                title = "Saldo del periodo",
+                                amount = period.balance,
+                                caption = period.label,
+                                palette = palette
+                            )
+                        }
+                        state.movements?.totals?.let { totals ->
+                            item { Metrics(totals = totals, palette = palette) }
+                        }
+                        item {
+                            SectionTitle(
+                                title = "Movimientos del periodo",
+                                palette = palette,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
                         val rows = state.movements?.items.orEmpty()
                         if (!state.loading && state.error == null && rows.isEmpty()) {
-                            item { MessagePanel(Icons.AutoMirrored.Outlined.ReceiptLong, if (period.canOpen)
-                                "No hay movimientos para este periodo." else "Este periodo solo muestra el saldo.") }
+                            item {
+                                MessagePanel(
+                                    icon = Icons.AutoMirrored.Outlined.ReceiptLong,
+                                    message = if (period.canOpen) "No hay movimientos para este periodo."
+                                    else "Este periodo solo muestra el saldo.",
+                                    palette = palette
+                                )
+                            }
                         }
-                        items(rows) { MovementRow(it) }
+                        items(rows) { movement ->
+                            MovementRow(
+                                movement = movement,
+                                palette = palette,
+                                onClick = { selectedMovement = movement }
+                            )
+                        }
                     }
                 }
             }
         }
     }
+
+    selectedMovement?.let { movement ->
+        MovementDetailSheet(
+            movement = movement,
+            palette = palette,
+            onDismiss = { selectedMovement = null }
+        )
+    }
 }
 
 @Composable
-private fun AccountTabs(academic: Boolean, select: (Boolean) -> Unit) {
-    val colors = paymentColors()
-    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)
-        .background(colors.surface, panel).padding(3.dp).selectableGroup()) {
-        listOf(false, true).forEach { term ->
-            val selected = academic == term
-            val background by animateColorAsState(if (selected) colors.blue else colors.surface, label = "Pestaña de Pagos")
-            val foreground = if (selected) Color.White else MaterialTheme.colorScheme.onSurface
-            Column(
-                Modifier.weight(1f).clip(inner).background(background)
-                    .selectable(selected, role = Role.Tab, onClick = { select(term) })
-                    .heightIn(min = 60.dp).padding(horizontal = 5.dp, vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)
+private fun AccountTabs(
+    academic: Boolean,
+    palette: PaymentsPalette,
+    select: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        listOf(false, true).forEach { isAcademicTab ->
+            val selected = academic == isAcademicTab
+            val bgColor by animateColorAsState(
+                targetValue = if (selected) palette.accentBlue else palette.surface,
+                label = "paymentsTabBg"
+            )
+            val contentColor = if (selected) Color.White else palette.textPrimary
+            val borderColor = if (selected) palette.accentBlue else palette.border
+
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .clip(SubCardRadius)
+                    .background(bgColor)
+                    .border(1.dp, borderColor, SubCardRadius)
+                    .selectable(
+                        selected = selected,
+                        role = Role.Tab,
+                        onClick = { select(isAcademicTab) }
+                    )
+                    .testTag(if (isAcademicTab) "payments_tab_academic" else "payments_tab_summary")
+                    .padding(horizontal = 10.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(if (term) Icons.Outlined.CalendarToday else Icons.Outlined.Layers, null, Modifier.size(22.dp), tint = foreground)
-                Text(if (term) "Periodo académico" else "Resumen de cuenta", color = foreground,
-                    style = MaterialTheme.typography.labelLarge, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Icon(
+                    imageVector = if (isAcademicTab) Icons.Outlined.CalendarToday else Icons.Outlined.School,
+                    contentDescription = null,
+                    tint = if (selected) Color.White else palette.textMuted,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = if (isAcademicTab) "Periodo académico" else "Resumen de cuenta",
+                    color = contentColor,
+                    fontSize = 13.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
 @Composable
-private fun BalanceHero(title: String, amount: String?, date: String? = null, caption: String? = null) {
-    val colors = paymentColors()
-    Row(Modifier.fillMaxWidth().clip(panel)
-        .background(Brush.horizontalGradient(listOf(colors.heroStart, colors.heroEnd))).padding(17.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            caption?.let { Text(it, color = Color(0xFFD4E5FF), style = MaterialTheme.typography.labelLarge) }
-            Text(title, color = Color.White, style = MaterialTheme.typography.titleMedium)
-            Text(amount ?: "Saldo no disponible", color = Color.White,
-                style = if (amount == null) MaterialTheme.typography.titleLarge else MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold)
-            date?.let { Text("Actualizado al $it", color = Color(0xFFE2EDFF), style = MaterialTheme.typography.bodyMedium) }
+private fun BalanceHero(
+    title: String,
+    amount: String?,
+    date: String? = null,
+    palette: PaymentsPalette
+) {
+    Surface(
+        shape = CardRadius,
+        border = BorderStroke(1.dp, palette.heroBorder),
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardRadius)
+            .background(Brush.horizontalGradient(listOf(palette.heroStart, palette.heroEnd)))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp, vertical = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = title,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = palette.heroLabel
+            )
+            Text(
+                text = amount ?: "Saldo no disponible",
+                fontSize = if (amount == null) 20.sp else 28.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = palette.heroValue,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            date?.let {
+                Text(
+                    text = "Actualizado al $it",
+                    fontSize = 12.sp,
+                    color = palette.heroCaption
+                )
+            }
         }
-        Icon(Icons.Outlined.AccountBalanceWallet, null, Modifier.size(48.dp), tint = Color(0xFFB9D8FF))
     }
 }
 
 @Composable
-private fun Metrics(totals: MovementAmounts) {
+private fun CompactBalanceCard(
+    title: String,
+    amount: String?,
+    caption: String? = null,
+    palette: PaymentsPalette
+) {
+    Surface(
+        shape = CardRadius,
+        border = BorderStroke(1.dp, palette.heroBorder),
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardRadius)
+            .background(Brush.horizontalGradient(listOf(palette.heroStart, palette.heroEnd)))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(IconBoxRadius)
+                    .background(
+                        if (palette.isDark) Color.White.copy(alpha = 0.14f) else palette.accentBlue.copy(alpha = 0.12f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Layers,
+                    contentDescription = null,
+                    tint = if (palette.isDark) Color.White else palette.accentBlue,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                caption?.let {
+                    Text(
+                        text = it,
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.heroCaption,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = title,
+                    fontSize = 12.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.heroLabel
+                )
+                Text(
+                    text = amount ?: "Saldo no disponible",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = palette.heroValue,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DueAmountCard(
+    due: String?,
+    currency: String?,
+    holds: Int?,
+    palette: PaymentsPalette
+) {
+    val holdLabel = when (holds) {
+        null -> "Sin retenciones"
+        0 -> "Sin retenciones"
+        else -> "$holds retenciones"
+    }
+    val hasHolds = holds != null && holds > 0
+
+    Surface(
+        shape = SubCardRadius,
+        color = palette.surface,
+        border = BorderStroke(1.dp, palette.border),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.softBlueBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = palette.softBlueText,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "Importe pendiente",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = palette.textSecondary
+                )
+                Text(
+                    text = due ?: "Importe no disponible",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (hasHolds) palette.warningBg else palette.softBlueBg
+            ) {
+                val badgeText = buildString {
+                    if (!currency.isNullOrBlank()) {
+                        append(currency)
+                        append(" · ")
+                    }
+                    append(holdLabel)
+                }
+                Text(
+                    text = badgeText,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (hasHolds) palette.warningText else palette.softBlueText,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Metrics(totals: MovementAmounts, palette: PaymentsPalette) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        if (maxWidth < 340.dp || androidx.compose.ui.platform.LocalDensity.current.fontScale > 1.2f) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Metric("Total de cargos", totals.charge, false, Modifier.fillMaxWidth())
-                Metric("Total de pagos", totals.payment, true, Modifier.fillMaxWidth())
+        if (maxWidth < 330.dp || LocalDensity.current.fontScale > 1.25f) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Metric("Total de cargos", totals.charge, paid = false, palette = palette, modifier = Modifier.fillMaxWidth())
+                Metric("Total de pagos", totals.payment, paid = true, palette = palette, modifier = Modifier.fillMaxWidth())
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Metric("Total de cargos", totals.charge, false, Modifier.weight(1f))
-                Metric("Total de pagos", totals.payment, true, Modifier.weight(1f))
+                Metric("Total de cargos", totals.charge, paid = false, palette = palette, modifier = Modifier.weight(1f))
+                Metric("Total de pagos", totals.payment, paid = true, palette = palette, modifier = Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun Metric(label: String, amount: String?, paid: Boolean, modifier: Modifier) {
-    val colors = paymentColors()
-    Surface(modifier, shape = panel, color = if (paid) colors.greenTint else colors.tint,
-        contentColor = MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Icon(if (paid) Icons.Outlined.CheckCircle else Icons.AutoMirrored.Outlined.ReceiptLong, null,
-                Modifier.size(21.dp), tint = if (paid) colors.green else colors.accent)
-            Text(label, style = MaterialTheme.typography.labelLarge)
-            Text(amount ?: "No disponible", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        }
+private fun Metric(
+    label: String,
+    amount: String?,
+    paid: Boolean,
+    palette: PaymentsPalette,
+    modifier: Modifier
+) {
+    val bgColor = if (paid) palette.greenBg else palette.surface
+    val borderColor = if (paid) palette.greenBorder else palette.border
+    val iconBg = if (paid) {
+        palette.greenAccent.copy(alpha = if (palette.isDark) 0.18f else 0.14f)
+    } else {
+        palette.softBlueBg
     }
-}
+    val iconTint = if (paid) palette.greenAccent else palette.softBlueText
 
-@Composable
-private fun MovementRow(movement: PaymentMovement) {
-    val colors = paymentColors()
-    PaymentPanel {
-        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.Top) {
-            BadgeIcon(Icons.AutoMirrored.Outlined.ReceiptLong)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(movement.label ?: movement.code ?: "Movimiento", fontWeight = FontWeight.SemiBold)
-                movement.code?.let { Text("Código · $it", style = MaterialTheme.typography.bodySmall) }
-                movement.date?.let { Text("Fecha · $it", style = MaterialTheme.typography.bodySmall) }
-                movement.amounts.charge?.let { Text("Cargo · $it", color = colors.accent) }
-                movement.amounts.payment?.let { Text("Pago · $it", color = colors.green) }
-                movement.amounts.balance?.let { Text("Saldo · $it", fontWeight = FontWeight.Medium) }
+    Surface(
+        modifier = modifier,
+        shape = SubCardRadius,
+        color = bgColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (paid) Icons.Outlined.CheckCircle else Icons.Outlined.Layers,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 11.5.sp,
+                    color = palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = amount ?: "No disponible",
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
 }
 
 @Composable
-private fun TermSelector(periods: List<PaymentPeriod>, current: PaymentPeriod?, select: (PaymentPeriod) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Seleccionar periodo académico", style = MaterialTheme.typography.labelLarge)
-        Box {
-            OutlinedButton(onClick = { expanded = true }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                shape = inner, border = BorderStroke(1.dp, paymentColors().border)) {
-                Text(current?.label ?: "Todos los periodos", Modifier.weight(1f))
-                Icon(Icons.Outlined.KeyboardArrowDown, null)
+private fun MovementRow(
+    movement: PaymentMovement,
+    palette: PaymentsPalette,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = CardRadius,
+        color = palette.surface,
+        border = BorderStroke(1.dp, palette.border),
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 13.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.softBlueBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = palette.softBlueText,
+                    modifier = Modifier.size(21.dp)
+                )
             }
-            DropdownMenu(expanded, onDismissRequest = { expanded = false }, modifier = Modifier.heightIn(max = 380.dp)) {
-                periods.forEach { period ->
-                    DropdownMenuItem(text = { Text(period.label) }, onClick = { expanded = false; select(period) })
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = movement.label ?: movement.code ?: "Movimiento",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.textPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                movement.code?.let {
+                    Text(
+                        text = "Código: $it",
+                        fontSize = 12.sp,
+                        color = palette.textSecondary
+                    )
+                }
+                movement.date?.let {
+                    Text(
+                        text = "Fecha: $it",
+                        fontSize = 12.sp,
+                        color = palette.textSecondary
+                    )
+                }
+                movement.amounts.charge?.let {
+                    MovementAmountLine(label = "Cargo:", value = it, valueColor = palette.textPrimary, labelColor = palette.textSecondary)
+                }
+                movement.amounts.payment?.let {
+                    MovementAmountLine(label = "Pago:", value = it, valueColor = palette.greenAccent, labelColor = palette.greenAccent)
+                }
+                movement.amounts.balance?.let {
+                    MovementAmountLine(label = "Saldo:", value = it, valueColor = palette.textPrimary, labelColor = palette.textSecondary)
+                }
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Ver detalle del movimiento",
+                tint = palette.textMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun MovementAmountLine(label: String, value: String, valueColor: Color, labelColor: Color) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = labelColor,
+            modifier = Modifier.widthIn(min = 42.dp)
+        )
+        Text(
+            text = value,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MovementDetailSheet(
+    movement: PaymentMovement,
+    palette: PaymentsPalette,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = palette.surface,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = movement.label ?: movement.code ?: "Detalle del movimiento",
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = palette.textPrimary
+            )
+            Surface(
+                shape = SubCardRadius,
+                color = palette.background,
+                border = BorderStroke(1.dp, palette.border),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    movement.code?.let { DetailSheetRow("Código", it, palette.textPrimary, palette) }
+                    movement.date?.let { DetailSheetRow("Fecha", it, palette.textPrimary, palette) }
+                    movement.amounts.charge?.let { DetailSheetRow("Cargo", it, palette.textPrimary, palette) }
+                    movement.amounts.payment?.let { DetailSheetRow("Pago", it, palette.greenAccent, palette) }
+                    movement.amounts.balance?.let { DetailSheetRow("Saldo", it, palette.accentBlue, palette) }
                 }
             }
         }
@@ -360,31 +1010,229 @@ private fun TermSelector(periods: List<PaymentPeriod>, current: PaymentPeriod?, 
 }
 
 @Composable
-private fun PaymentPanel(content: @Composable () -> Unit) {
-    val colors = paymentColors()
-    Surface(Modifier.fillMaxWidth(), shape = panel, color = colors.surface, border = BorderStroke(1.dp, colors.border), content = content)
-}
-
-@Composable
-private fun SectionTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-}
-
-@Composable
-private fun BadgeIcon(icon: ImageVector) {
-    val colors = paymentColors()
-    Box(Modifier.size(40.dp).background(colors.tint, inner), contentAlignment = Alignment.Center) {
-        Icon(icon, null, Modifier.size(23.dp), tint = colors.accent)
+private fun DetailSheetRow(label: String, value: String, valueColor: Color, palette: PaymentsPalette) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, fontSize = 13.sp, color = palette.textSecondary)
+        Text(text = value, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = valueColor)
     }
 }
 
 @Composable
-private fun MessagePanel(icon: ImageVector, message: String, actions: (@Composable ColumnScope.() -> Unit)? = null) {
-    PaymentPanel {
-        Row(Modifier.padding(14.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            BadgeIcon(icon)
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(message)
+private fun TermSelector(
+    periods: List<PaymentPeriod>,
+    current: PaymentPeriod?,
+    palette: PaymentsPalette,
+    select: (PaymentPeriod) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = "Seleccionar periodo académico",
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.Medium,
+            color = palette.textSecondary
+        )
+        Box {
+            Surface(
+                onClick = { expanded = true },
+                shape = SubCardRadius,
+                color = palette.surface,
+                border = BorderStroke(1.dp, palette.border),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .testTag("payments_term_selector")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = current?.label ?: "Todos los periodos",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = palette.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = "Seleccionar periodo académico",
+                        tint = palette.textMuted,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+                modifier = Modifier.heightIn(max = 380.dp)
+            ) {
+                periods.forEach { period ->
+                    DropdownMenuItem(
+                        text = { Text(period.label, fontSize = 13.5.sp) },
+                        onClick = {
+                            expanded = false
+                            select(period)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PeriodItemCard(
+    term: PaymentPeriod,
+    isCurrent: Boolean,
+    palette: PaymentsPalette,
+    onClick: () -> Unit
+) {
+    val activeBalance = hasPositiveBalance(term.balance)
+    Surface(
+        onClick = onClick,
+        shape = CardRadius,
+        color = palette.surface,
+        border = BorderStroke(1.dp, palette.border),
+        shadowElevation = if (palette.isDark) 0.dp else 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.softBlueBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.CalendarToday,
+                    contentDescription = null,
+                    tint = palette.softBlueText,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = term.label,
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = palette.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = term.balance ?: "Saldo no disponible",
+                    fontSize = 13.sp,
+                    fontWeight = if (activeBalance) FontWeight.Bold else FontWeight.Medium,
+                    color = if (activeBalance) palette.accentBlue else palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            if (isCurrent) {
+                Surface(
+                    shape = RoundedCornerShape(50),
+                    color = palette.accentBlue
+                ) {
+                    Text(
+                        text = "Actual",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = palette.textMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(
+    title: String,
+    palette: PaymentsPalette,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = title,
+        fontSize = 17.sp,
+        fontWeight = FontWeight.Bold,
+        color = palette.textPrimary,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun MessagePanel(
+    icon: ImageVector,
+    message: String,
+    palette: PaymentsPalette,
+    actions: (@Composable ColumnScope.() -> Unit)? = null
+) {
+    Surface(
+        shape = CardRadius,
+        color = palette.surface,
+        border = BorderStroke(1.dp, palette.border),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.softBlueBg),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = palette.softBlueText,
+                    modifier = Modifier.size(21.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = message,
+                    fontSize = 13.5.sp,
+                    color = palette.textPrimary
+                )
                 actions?.invoke(this)
             }
         }

@@ -13,7 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.EventNote
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Calculate
@@ -36,7 +35,6 @@ import androidx.compose.material.icons.outlined.Assignment
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.*
 import androidx.compose.ui.draw.clip
@@ -177,7 +175,6 @@ fun HomeScreen(
     )
     val shared by dashboard.state.collectAsState()
     val unreadCount = shared.notices?.noLeidas ?: 0
-    val semanaEtiqueta = shared.week?.takeIf { it.configurada && it.fueraDeCiclo != true }?.etiqueta
     val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
     DisposableEffect(dashboard, lifecycle) {
         val observer = LifecycleEventObserver { _, _ ->
@@ -480,47 +477,6 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            if (semanaEtiqueta != null && pagerState.currentPage == 0) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(
-                            Brush.linearGradient(
-                                listOf(Color(0xFF102C67), Color(0xFF245BE0), Color(0xFF197DAD))
-                            )
-                        )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.15f),
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.EventNote,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = semanaEtiqueta!!,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                }
-            }
             HorizontalPager(
                 state = pagerState,
                 userScrollEnabled = !showingAccount,
