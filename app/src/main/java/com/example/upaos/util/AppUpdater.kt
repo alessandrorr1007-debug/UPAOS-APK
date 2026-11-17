@@ -210,9 +210,9 @@ object AppUpdater {
     fun getCurrentVersionName(context: Context): String {
         return try {
             val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            packageInfo.versionName ?: "1.5"
+            packageInfo.versionName ?: "1.7.9"
         } catch (_: Exception) {
-            "1.5"
+            "1.7.9"
         }
     }
 

@@ -18,6 +18,12 @@ android {
     }
 
     signingConfigs {
+        create("debugConfig") {
+            storeFile = file("${rootDir}/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("distribution") {
             val signingPath = System.getenv("UPAOS_KEYSTORE_PATH")
             if (!signingPath.isNullOrBlank()) {
@@ -29,6 +35,9 @@ android {
         }
     }
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debugConfig")
+        }
         release {
             isDebuggable = false
             if (!System.getenv("UPAOS_KEYSTORE_PATH").isNullOrBlank()) {

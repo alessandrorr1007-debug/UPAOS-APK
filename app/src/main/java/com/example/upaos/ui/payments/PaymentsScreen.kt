@@ -64,15 +64,18 @@ internal fun PaymentsHome(onOpenAccount: () -> Unit) {
         item {
             Row(
                 Modifier.fillMaxWidth().background(Brush.horizontalGradient(listOf(colors.heroStart, colors.heroEnd)))
-                    .padding(horizontal = 22.dp, vertical = 23.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Pagos", color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("Estado de cuenta y pagos universitarios", color = Color.White, style = MaterialTheme.typography.bodyMedium)
-                }
-                Icon(Icons.Outlined.CreditCard, null, Modifier.size(55.dp), tint = Color(0xFFB9D8FF))
+                Text(
+                    "Estado de cuenta y pagos universitarios",
+                    modifier = Modifier.weight(1f),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Icon(Icons.Outlined.CreditCard, null, Modifier.size(32.dp), tint = Color(0xFFB9D8FF))
             }
         }
         item {

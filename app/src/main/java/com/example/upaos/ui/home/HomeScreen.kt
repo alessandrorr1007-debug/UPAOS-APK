@@ -252,14 +252,6 @@ fun HomeScreen(
                 )
 
                 NavigationDrawerItem(
-                    label = { Text("Estado de cuenta", fontWeight = FontWeight.Medium) },
-                    icon = { Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(22.dp)) },
-                    selected = false,
-                    onClick = { coroutineScope.launch { drawerState.close(); openPayments() } },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                NavigationDrawerItem(
                     label = { Text("Cambiar de cuenta", fontWeight = FontWeight.Medium) },
                     icon = {
                         Icon(
@@ -617,7 +609,7 @@ fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Aplicación estudiantil no oficial diseñada para optimizar el acceso a cursos, horarios, notas y asistencias UPAO.",
+                        text = "Aplicación estudiantil no oficial diseñada para optimizar el acceso a cursos, horarios, notas, asistencias, pagos y tareas UPAO.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

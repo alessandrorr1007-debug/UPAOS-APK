@@ -83,6 +83,6 @@ class PaymentsScreenTest {
         compose.onNodeWithContentDescription("Actualizar estado de cuenta").performClick()
         compose.runOnIdle { assertEquals(true, refreshed) }
         compose.onNodeWithContentDescription("Volver").performClick()
-        compose.onNodeWithText("Pagos").assertIsDisplayed()
+        compose.onNodeWithText("Estado de cuenta y pagos universitarios").assertIsDisplayed()
     }
 }
