@@ -56,28 +56,18 @@ internal fun PaymentsHome(onOpenAccount: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(palette.background),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Column(
+            Text(
+                text = "Estado de cuenta y pagos universitarios",
+                fontSize = 13.5.sp,
+                color = palette.textSecondary,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 2.dp, vertical = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
-            ) {
-                Text(
-                    text = "Pagos",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = palette.textPrimary
-                )
-                Text(
-                    text = "Estado de cuenta y pagos universitarios",
-                    fontSize = 13.5.sp,
-                    color = palette.textSecondary
-                )
-            }
+                    .padding(horizontal = 2.dp)
+            )
         }
 
         item {
@@ -96,31 +86,7 @@ internal fun PaymentsHome(onOpenAccount: () -> Unit) {
                     icon = Icons.Outlined.EventAvailable,
                     title = "Estado de cuenta",
                     description = "Consulta tu resumen, períodos y movimientos",
-                    palette = palette,
-                    solidIconBadge = true,
-                    showArrow = true
-                )
-            }
-        }
-
-        item {
-            Surface(
-                shape = CardRadius,
-                color = palette.surface,
-                border = BorderStroke(1.dp, palette.border),
-                shadowElevation = if (palette.isDark) 0.dp else 1.5.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("payments_entry_certificates")
-            ) {
-                EntryRow(
-                    icon = Icons.Outlined.Description,
-                    title = "Constancias y otros",
-                    description = "Constancias de pago, boletas y más",
-                    palette = palette,
-                    solidIconBadge = false,
-                    upcoming = true,
-                    showArrow = false
+                    palette = palette
                 )
             }
         }
@@ -132,36 +98,33 @@ private fun EntryRow(
     icon: ImageVector,
     title: String,
     description: String,
-    palette: PaymentsPalette,
-    solidIconBadge: Boolean,
-    upcoming: Boolean = false,
-    showArrow: Boolean = false
+    palette: PaymentsPalette
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(48.dp)
+                .size(46.dp)
                 .clip(IconBoxRadius)
-                .background(if (solidIconBadge) palette.accentBlue else palette.softBlueBg),
+                .background(palette.accentBlue),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (solidIconBadge) Color.White else palette.softBlueText,
-                modifier = Modifier.size(23.dp)
+                tint = Color.White,
+                modifier = Modifier.size(22.dp)
             )
         }
 
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(
                 text = title,
@@ -175,31 +138,14 @@ private fun EntryRow(
                 lineHeight = 17.sp,
                 color = palette.textSecondary
             )
-            if (upcoming) {
-                Surface(
-                    shape = RoundedCornerShape(50),
-                    color = palette.softBlueBg,
-                    modifier = Modifier.padding(top = 2.dp)
-                ) {
-                    Text(
-                        text = "Próximamente",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = palette.softBlueText,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                    )
-                }
-            }
         }
 
-        if (showArrow) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = palette.textMuted,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = palette.textMuted,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 

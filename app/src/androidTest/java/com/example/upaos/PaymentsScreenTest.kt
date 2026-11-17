@@ -78,7 +78,9 @@ class PaymentsScreenTest {
                 else PaymentsHome { opened.value = true }
             }
         }
-        compose.onNodeWithText("Próximamente").assertIsDisplayed()
+        compose.onNodeWithText("Pagos").assertDoesNotExist()
+        compose.onNodeWithText("Constancias y otros").assertDoesNotExist()
+        compose.onNodeWithText("Próximamente").assertDoesNotExist()
         compose.onNodeWithText("Estado de cuenta").performClick()
         compose.onNodeWithContentDescription("Actualizar estado de cuenta").performClick()
         compose.runOnIdle { assertEquals(true, refreshed) }

@@ -1,49 +1,88 @@
 package com.example.upaos.ui.calculadora
-import com.example.upaos.ui.components.CampusTopBar
-import com.example.upaos.ui.components.CampusCard
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
-import com.example.upaos.data.local.GradesCache
-import com.example.upaos.data.local.TokenManager
-import com.example.upaos.data.model.GradesResponse
-import com.google.gson.Gson
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.upaos.ui.theme.campusInfo as UpaoBlue
-import com.example.upaos.ui.theme.campusSuccess as UpaoGreen
-import com.example.upaos.ui.theme.campusError as UpaoRed
+import com.example.upaos.data.local.GradesCache
+import com.example.upaos.data.local.TokenManager
+import com.example.upaos.data.model.GradesResponse
+import com.example.upaos.ui.components.CampusTopBar
+import com.example.upaos.ui.theme.LocalUpaoDarkTheme
+import com.example.upaos.ui.theme.MinimalSectionPalette
+import com.example.upaos.ui.theme.minimalSectionPalette
+import com.google.gson.Gson
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // Nota mínima aprobatoria oficial UPAO
@@ -154,6 +193,7 @@ private fun calcular(notas: List<Double?>): ResultadoCalculo {
 @Composable
 fun CalculadoraScreen(onBack: () -> Unit) {
     val context = LocalContext.current
+    val palette = minimalSectionPalette(LocalUpaoDarkTheme.current)
     val user = remember(context) { TokenManager(context).getSavedUser() }
     var valores by rememberSaveable(user) { mutableStateOf(listOf("", "", "", "")) }
     var selectedCourse by rememberSaveable(user) { mutableStateOf(-1) }
@@ -161,16 +201,22 @@ fun CalculadoraScreen(onBack: () -> Unit) {
     var loadingCourses by remember { mutableStateOf(true) }
     var courseMenu by remember { mutableStateOf(false) }
     var cacheError by remember { mutableStateOf(false) }
+
     LaunchedEffect(user) {
         try {
             savedGrades = withContext(Dispatchers.IO) {
                 user?.let { GradesCache(context).cargar("notas_$it") }
                     ?.let { Gson().fromJson(it, GradesResponse::class.java) }
             }
-        } catch (e: CancellationException) { throw e }
-        catch (_: Exception) { cacheError = true }
-        finally { loadingCourses = false }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            cacheError = true
+        } finally {
+            loadingCourses = false
+        }
     }
+
     val courses = savedGrades?.cursos.orEmpty()
     val course = courses.getOrNull(selectedCourse)
     val original = course?.let(::simulationGrades) ?: listOf("", "", "", "")
@@ -186,209 +232,387 @@ fun CalculadoraScreen(onBack: () -> Unit) {
     val hayNotasIngresadas = valores.any { it.isNotBlank() }
     val completedGrades = completePassingGrades(valores, componentes.map { it.peso }, NOTA_MINIMA)
     val missingCount = valores.count { it.isBlank() }
+    val hasInvalidGrade = valores.any {
+        it.isNotBlank() && it.toDoubleOrNull()?.let { n -> n.isFinite() && n in 0.0..20.0 } != true
+    }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = palette.background,
         topBar = {
-            CampusTopBar(
-                title = {
-                    Text(
-                        text = "Calculadora",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                ),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
-                    }
-                },
-                actions = {
-                    AnimatedVisibility(visible = hayNotasIngresadas, enter = fadeIn(), exit = fadeOut()) {
-                        IconButton(onClick = { valores = listOf("", "", "", "") }) {
+            Column(modifier = Modifier.background(palette.background)) {
+                CampusTopBar(
+                    title = {
+                        Text(
+                            text = "Calculadora",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = palette.textPrimary
+                        )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = palette.background
+                    ),
+                    navigationIcon = {
+                        IconButton(
+                            onClick = onBack,
+                            modifier = Modifier.testTag("calculator_back_button")
+                        ) {
                             Icon(
-                                imageVector = Icons.Filled.Refresh,
-                                contentDescription = "Limpiar notas",
-                                tint = MaterialTheme.colorScheme.primary
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Volver",
+                                tint = palette.textPrimary
+                            )
+                        }
+                    },
+                    actions = {
+                        AnimatedVisibility(visible = hayNotasIngresadas, enter = fadeIn(), exit = fadeOut()) {
+                            IconButton(
+                                onClick = { valores = listOf("", "", "", "") },
+                                modifier = Modifier.testTag("calculator_reset_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = "Limpiar notas",
+                                    tint = palette.accentBlue
+                                )
+                            }
+                        }
+                    }
+                )
+                HorizontalDivider(thickness = 1.dp, color = palette.border)
+            }
+        }
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 600.dp)
+                    .verticalScroll(rememberScrollState())
+                    .imePadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = palette.surface,
+                    border = BorderStroke(1.dp, palette.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(palette.softBlueBg),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Calculate,
+                                contentDescription = null,
+                                tint = palette.accentBlue,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = "Simula tus notas",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = palette.textPrimary
+                            )
+                            Text(
+                                text = "Calcula tu promedio y la nota que necesitas para aprobar.",
+                                fontSize = 12.sp,
+                                lineHeight = 16.sp,
+                                color = palette.textSecondary
                             )
                         }
                     }
                 }
-            )
-        }
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text("Simula tus notas", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            ExposedDropdownMenuBox(expanded = courseMenu, onExpandedChange = {
-                if (!loadingCourses) courseMenu = !courseMenu
-            }) {
-                OutlinedTextField(
-                    value = course?.displayNombre ?: "Ingreso manual",
-                    onValueChange = {}, readOnly = true,
-                    label = { Text("Curso") },
-                    singleLine = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = courseMenu) },
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    textStyle = MaterialTheme.typography.bodyMedium,
-                    shape = RoundedCornerShape(12.dp)
-                )
-                ExposedDropdownMenu(expanded = courseMenu, onDismissRequest = { courseMenu = false }) {
-                    DropdownMenuItem(text = { Text("Ingreso manual") }, onClick = {
-                        selectedCourse = -1; valores = listOf("", "", "", ""); courseMenu = false
-                    })
-                    courses.forEachIndexed { index, item ->
-                        DropdownMenuItem(text = { Text(item.displayNombre, maxLines = 2, overflow = TextOverflow.Ellipsis) }, onClick = {
-                            selectedCourse = index; valores = simulationGrades(item); courseMenu = false
-                        })
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Curso",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = palette.textSecondary
+                        )
+                        if (course != null) {
+                            TextButton(
+                                onClick = { valores = original },
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.testTag("restore_saved_grades_button")
+                            ) {
+                                Text(
+                                    text = "Restaurar notas guardadas",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = palette.accentBlue
+                                )
+                            }
+                        }
+                    }
+
+                    ExposedDropdownMenuBox(
+                        expanded = courseMenu,
+                        onExpandedChange = { if (!loadingCourses) courseMenu = !courseMenu }
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = palette.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (courseMenu) palette.accentBlue else palette.border
+                            ),
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("course_selector_dropdown")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = when {
+                                        loadingCourses -> "Cargando cursos guardados…"
+                                        else -> course?.displayNombre ?: "Ingreso manual"
+                                    },
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (loadingCourses) palette.textMuted else palette.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Icon(
+                                    imageVector = if (courseMenu) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = "Seleccionar curso",
+                                    tint = palette.textSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        ExposedDropdownMenu(
+                            expanded = courseMenu,
+                            onDismissRequest = { courseMenu = false },
+                            modifier = Modifier.background(palette.surface)
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = "Ingreso manual",
+                                        color = palette.textPrimary,
+                                        fontWeight = if (selectedCourse == -1) FontWeight.SemiBold else FontWeight.Normal
+                                    )
+                                },
+                                onClick = {
+                                    selectedCourse = -1
+                                    valores = listOf("", "", "", "")
+                                    courseMenu = false
+                                }
+                            )
+                            courses.forEachIndexed { index, item ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = item.displayNombre,
+                                            color = palette.textPrimary,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                            fontWeight = if (selectedCourse == index) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                    },
+                                    onClick = {
+                                        selectedCourse = index
+                                        valores = simulationGrades(item)
+                                        courseMenu = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    if (cacheError) {
+                        Text(
+                            text = "No se pudieron leer las notas guardadas. Puedes ingresar notas manualmente.",
+                            fontSize = 12.sp,
+                            color = palette.dangerText
+                        )
+                    } else if (course != null && !savedGrades?.periodo.isNullOrBlank()) {
+                        Text(
+                            text = "Notas guardadas · ${savedGrades?.periodo.orEmpty()}",
+                            fontSize = 12.sp,
+                            color = palette.textMuted
+                        )
                     }
                 }
-            }
-            Text(
-                when {
-                    loadingCourses -> "Cargando cursos guardados…"
-                    cacheError -> "No se pudieron leer las notas guardadas. Puedes ingresar notas manualmente."
-                    courses.isEmpty() -> "Consulta tus notas primero para poder elegir un curso. También puedes ingresar notas manualmente."
-                    course != null -> "Notas guardadas · ${savedGrades?.periodo.orEmpty()}. Edita para simular sin cambiar tus notas reales."
-                    else -> "Elige un curso para cargar sus notas guardadas o ingrésalas manualmente."
-                },
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            if (course != null) {
-                TextButton(onClick = { valores = original }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-                    Text("Restaurar notas guardadas", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-            // Subtítulo con pesos oficiales
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+
                 Text(
                     text = "Evaluaciones",
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = palette.textPrimary
                 )
-                Text(
-                    text = "Resultado al instante",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
 
-            // Grid 2x2 elegante
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                NotaCard(
-                    componente = componentes[0],
-                    value = valores[0],
-                    source = gradeSource(valores[0], original[0]),
-                    onValueChange = { nuevo ->
-                        valores = valores.toMutableList().also { it[0] = nuevo }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                NotaCard(
-                    componente = componentes[1],
-                    value = valores[1],
-                    source = gradeSource(valores[1], original[1]),
-                    onValueChange = { nuevo ->
-                        valores = valores.toMutableList().also { it[1] = nuevo }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                NotaCard(
-                    componente = componentes[2],
-                    value = valores[2],
-                    source = gradeSource(valores[2], original[2]),
-                    onValueChange = { nuevo ->
-                        valores = valores.toMutableList().also { it[2] = nuevo }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-                NotaCard(
-                    componente = componentes[3],
-                    value = valores[3],
-                    source = gradeSource(valores[3], original[3]),
-                    onValueChange = { nuevo ->
-                        valores = valores.toMutableList().also { it[3] = nuevo }
-                    },
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            if (missingCount > 0) {
-                OutlinedButton(
-                    onClick = { completedGrades?.let { valores = it } },
-                    enabled = completedGrades != null,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                ) {
-                    Text("Completar para aprobar", style = MaterialTheme.typography.labelMedium)
-                }
-                Text(
-                    text = when {
-                        valores.any { it.isNotBlank() && it.toDoubleOrNull()?.let { n -> n.isFinite() && n in 0.0..20.0 } != true } -> "Revisa las notas: deben estar entre 0 y 20."
-                        completedGrades == null -> "Con estas notas no se llega a 10.5, ni con 20 en lo pendiente."
-                        missingCount > 1 -> "Calcula la misma nota necesaria en las evaluaciones pendientes para llegar a 10.5."
-                        else -> "Calcula y coloca la nota que falta para llegar a 10.5."
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            ResultadoBanner(
-                resultado = resultado,
-                puntosAcumulados = sumaPonderada,
-                llenas = llenas
-            )
-
-            // Pie de página sutil
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(18.dp)
+                    NotaCard(
+                        componente = componentes[0],
+                        value = valores[0],
+                        source = gradeSource(valores[0], original[0]),
+                        palette = palette,
+                        onValueChange = { nuevo ->
+                            valores = valores.toMutableList().also { it[0] = nuevo }
+                        },
+                        modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "La nota mínima aprobatoria UPAO es 10.5.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    NotaCard(
+                        componente = componentes[1],
+                        value = valores[1],
+                        source = gradeSource(valores[1], original[1]),
+                        palette = palette,
+                        onValueChange = { nuevo ->
+                            valores = valores.toMutableList().also { it[1] = nuevo }
+                        },
+                        modifier = Modifier.weight(1f)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    NotaCard(
+                        componente = componentes[2],
+                        value = valores[2],
+                        source = gradeSource(valores[2], original[2]),
+                        palette = palette,
+                        onValueChange = { nuevo ->
+                            valores = valores.toMutableList().also { it[2] = nuevo }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    NotaCard(
+                        componente = componentes[3],
+                        value = valores[3],
+                        source = gradeSource(valores[3], original[3]),
+                        palette = palette,
+                        onValueChange = { nuevo ->
+                            valores = valores.toMutableList().also { it[3] = nuevo }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                if (missingCount > 0) {
+                    Button(
+                        onClick = { completedGrades?.let { valores = it } },
+                        enabled = completedGrades != null,
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = palette.accentBlue,
+                            contentColor = Color.White,
+                            disabledContainerColor = palette.pillBg,
+                            disabledContentColor = palette.textMuted
+                        ),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("complete_passing_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Calculate,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Completar para aprobar",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (hasInvalidGrade) {
+                        Text(
+                            text = "Revisa las notas: deben estar entre 0 y 20.",
+                            fontSize = 12.sp,
+                            color = palette.dangerText
+                        )
+                    } else if (completedGrades == null) {
+                        Text(
+                            text = "Con estas notas no se llega a 10.5, ni con 20 en lo pendiente.",
+                            fontSize = 12.sp,
+                            color = palette.dangerText
+                        )
+                    }
+                }
+
+                AnimatedVisibility(visible = llenas > 0) {
+                    ResultadoBanner(
+                        resultado = resultado,
+                        puntosAcumulados = sumaPonderada,
+                        llenas = llenas,
+                        palette = palette
+                    )
+                }
+
+                Surface(
+                    color = palette.surface,
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, palette.border),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = palette.textPrimary.copy(alpha = 0.85f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "La nota mínima aprobatoria UPAO es 10.5.",
+                            fontSize = 13.sp,
+                            color = palette.textSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+            }
         }
     }
 }
@@ -397,28 +621,35 @@ fun CalculadoraScreen(onBack: () -> Unit) {
 private fun ResultadoBanner(
     resultado: ResultadoCalculo,
     puntosAcumulados: Double,
-    llenas: Int
+    llenas: Int,
+    palette: MinimalSectionPalette
 ) {
-    val color = when (resultado.estado) {
-        EstadoCalculo.APROBADO -> UpaoGreen
-        EstadoCalculo.DESAPROBADO, EstadoCalculo.IMPOSIBLE -> UpaoRed
-        EstadoCalculo.ALCANZABLE -> UpaoBlue
-        EstadoCalculo.PARCIAL -> UpaoBlue
-        EstadoCalculo.NEUTRO -> MaterialTheme.colorScheme.onSurfaceVariant
+    val accentColor = when (resultado.estado) {
+        EstadoCalculo.APROBADO -> palette.greenText
+        EstadoCalculo.DESAPROBADO, EstadoCalculo.IMPOSIBLE -> palette.dangerText
+        EstadoCalculo.ALCANZABLE, EstadoCalculo.PARCIAL -> palette.accentBlue
+        EstadoCalculo.NEUTRO -> palette.textMuted
+    }
+    val badgeBg = when (resultado.estado) {
+        EstadoCalculo.APROBADO -> palette.greenBg
+        EstadoCalculo.DESAPROBADO, EstadoCalculo.IMPOSIBLE -> palette.dangerBg
+        EstadoCalculo.ALCANZABLE, EstadoCalculo.PARCIAL -> palette.softBlueBg
+        EstadoCalculo.NEUTRO -> palette.pillBg
     }
 
-    CampusCard(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = RoundedCornerShape(14.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
+    Surface(
+        color = palette.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, palette.border),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("calculator_result_card")
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
-            // Fila superior: Título + Badge de estado
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -426,17 +657,17 @@ private fun ResultadoBanner(
             ) {
                 Text(
                     text = resultado.titulo.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.8.sp,
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    letterSpacing = 0.7.sp,
+                    color = palette.textMuted,
+                    modifier = Modifier.weight(1f)
                 )
                 if (resultado.estado != EstadoCalculo.NEUTRO) {
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = color.copy(alpha = 0.12f),
-                        contentColor = color
+                        color = badgeBg,
+                        contentColor = accentColor
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -447,7 +678,7 @@ private fun ResultadoBanner(
                                 modifier = Modifier
                                     .size(6.dp)
                                     .clip(CircleShape)
-                                    .background(color)
+                                    .background(accentColor)
                             )
                             Text(
                                 text = when (resultado.estado) {
@@ -468,35 +699,33 @@ private fun ResultadoBanner(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Número / Valor destacado
             Row(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = resultado.valorDestacado,
-                    style = MaterialTheme.typography.headlineSmall,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Black,
-                    color = if (resultado.estado == EstadoCalculo.NEUTRO) MaterialTheme.colorScheme.outline else color
+                    color = if (resultado.estado == EstadoCalculo.NEUTRO) palette.textMuted else accentColor
                 )
                 if (resultado.estado != EstadoCalculo.NEUTRO) {
                     Text(
                         text = if (resultado.estado == EstadoCalculo.ALCANZABLE) "requerida" else "/ 20 pts",
-                        style = MaterialTheme.typography.titleSmall,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 2.dp)
+                        color = palette.textSecondary,
+                        modifier = Modifier.padding(bottom = 3.dp)
                     )
                 }
             }
 
-            // Barra de progreso delgada (solo si hay notas)
             if (llenas > 0) {
                 Spacer(modifier = Modifier.height(8.dp))
                 val fraction = (puntosAcumulados / 20.0).toFloat().coerceIn(0f, 1f)
                 val animatedFraction by animateFloatAsState(
                     targetValue = fraction,
-                    animationSpec = tween(400),
+                    animationSpec = tween(350),
                     label = "barProgreso"
                 )
 
@@ -505,26 +734,25 @@ private fun ResultadoBanner(
                         .fillMaxWidth()
                         .height(6.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .background(palette.pillBg)
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxHeight()
                             .fillMaxWidth(animatedFraction)
                             .clip(RoundedCornerShape(3.dp))
-                            .background(color)
+                            .background(accentColor)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Mensaje descriptivo
             Text(
                 text = resultado.mensaje,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                lineHeight = 16.sp
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = palette.textSecondary
             )
         }
     }
@@ -535,24 +763,23 @@ private fun NotaCard(
     componente: ComponentePeso,
     value: String,
     source: String,
+    palette: MinimalSectionPalette,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val d = value.toDoubleOrNull()
     val tieneNota = d != null
     val esInvalido = value.isNotEmpty() && (d == null || d < 0.0 || d > 20.0)
-
-    // Aporte real en puntos
     val aporte = if (tieneNota && !esInvalido) (d!! * componente.peso / 100.0) else null
+    var isFocused by remember { mutableStateOf(false) }
 
-    CampusCard(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    Surface(
+        color = palette.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, if (esInvalido) palette.dangerText else palette.border),
         modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            // Encabezado con nombre y peso
+        Column(modifier = Modifier.padding(12.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -560,99 +787,125 @@ private fun NotaCard(
             ) {
                 Text(
                     text = componente.nombre,
-                    style = MaterialTheme.typography.titleSmall,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = palette.textPrimary
                 )
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
+                    shape = RoundedCornerShape(50),
+                    color = palette.pillBg
                 ) {
                     Text(
-                        text = "${componente.peso}%",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = "${componente.peso} %",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        color = palette.textSecondary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Campo de entrada estilizado y centrado
-            OutlinedTextField(
-                value = value,
-                onValueChange = { input ->
-                    if (input.length <= 5) {
-                        onValueChange(input.replace(',', '.').filter { it.isDigit() || it == '.' })
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = palette.surfaceSoft,
+                border = BorderStroke(
+                    1.dp,
+                    when {
+                        esInvalido -> palette.dangerText
+                        isFocused -> palette.accentBlue
+                        else -> palette.border
                     }
-                },
-                placeholder = {
-                    Text(
-                        text = "0 - 20",
-                        style = TextStyle(
-                            textAlign = TextAlign.Center,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f)
-                        ),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                },
-                trailingIcon = {
-                    if (value.isNotEmpty()) {
-                        IconButton(onClick = { onValueChange("") }, modifier = Modifier.size(24.dp)) {
-                            Icon(
-                                imageVector = Icons.Filled.Clear,
-                                contentDescription = "Borrar ${componente.nombre}",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-                },
-                isError = esInvalido,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                textStyle = TextStyle(
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    color = if (tieneNota && !esInvalido) {
-                        if (d!! >= NOTA_MINIMA) UpaoGreen else UpaoRed
-                    } else MaterialTheme.colorScheme.onSurface
-                ),
-                shape = RoundedCornerShape(10.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
                 ),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-            )
+                    .heightIn(min = 48.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    BasicTextField(
+                        value = value,
+                        onValueChange = { input ->
+                            if (input.length <= 5) {
+                                onValueChange(input.replace(',', '.').filter { it.isDigit() || it == '.' })
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        cursorBrush = SolidColor(palette.accentBlue),
+                        textStyle = TextStyle(
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            color = when {
+                                esInvalido -> palette.dangerText
+                                tieneNota -> if (d!! >= NOTA_MINIMA) palette.greenText else palette.dangerText
+                                else -> palette.textPrimary
+                            }
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(end = if (value.isNotEmpty()) 22.dp else 0.dp)
+                            .onFocusChanged { isFocused = it.isFocused }
+                            .testTag("nota_input_${componente.id}"),
+                        decorationBox = { innerTextField ->
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (value.isEmpty()) {
+                                    Text(
+                                        text = "0 - 20",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = palette.textMuted,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        }
+                    )
 
-            // Línea inferior: muestra cuánto aporta al promedio o error
-            Spacer(modifier = Modifier.height(6.dp))
+                    if (value.isNotEmpty()) {
+                        IconButton(
+                            onClick = { onValueChange("") },
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Clear,
+                                contentDescription = "Borrar ${componente.nombre}",
+                                tint = palette.textMuted,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             if (esInvalido) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "Debe ser de 0 a 20",
-                    color = MaterialTheme.colorScheme.error,
+                    color = palette.dangerText,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
                 )
             } else if (aporte != null) {
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "$source · +${formatNota(aporte)} pts",
-                    color = UpaoGreen,
+                    color = palette.greenText,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.SemiBold
-                )
-            } else {
-                Text(
-                    text = "Pendiente · simula aquí",
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                    fontSize = 11.sp
                 )
             }
         }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Calculate
@@ -27,7 +28,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.outlined.EventAvailable
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.School
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.FactCheck
@@ -55,7 +58,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.upaos.data.local.TokenManager
@@ -66,6 +71,8 @@ import com.example.upaos.ui.payments.PaymentsHome
 import com.example.upaos.ui.payments.PaymentsScreen
 import com.example.upaos.ui.payments.PaymentsTopBar
 import com.example.upaos.ui.payments.rememberPaymentsViewModel
+import com.example.upaos.ui.theme.LocalUpaoDarkTheme
+import com.example.upaos.ui.theme.minimalSectionPalette
 import androidx.compose.material.icons.automirrored.filled.Assignment
 import kotlinx.coroutines.launch
 
@@ -190,130 +197,183 @@ fun HomeScreen(
     var showAboutDialog by remember { mutableStateOf(false) }
     val appVersion = remember { com.example.upaos.util.AppUpdater.getCurrentVersionName(context) }
 
+    val drawerPalette = minimalSectionPalette(LocalUpaoDarkTheme.current)
+    val drawerDisplayName = remember(profileName, cachedProfile, savedAccount, usuario) {
+        profileName?.takeIf { it.isNotBlank() }
+            ?: cachedProfile?.fullName?.takeIf { it.isNotBlank() }
+            ?: savedAccount?.nombre?.takeIf { it.isNotBlank() }
+            ?: usuario
+            ?: "Estudiante UPAO"
+    }
+    val drawerInitial = remember(drawerDisplayName) {
+        drawerDisplayName.trim().firstOrNull { it.isLetter() }?.uppercaseChar()?.toString() ?: "U"
+    }
+    val drawerCode = usuario?.takeIf { it.isNotBlank() } ?: "Estudiante UPAO"
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                modifier = Modifier.width(300.dp),
-                drawerContainerColor = MaterialTheme.colorScheme.surface
+                modifier = Modifier
+                    .width(300.dp)
+                    .testTag("navigation_drawer_sheet"),
+                drawerContainerColor = drawerPalette.background,
+                windowInsets = DrawerDefaults.windowInsets
             ) {
-                Spacer(modifier = Modifier.height(16.dp))
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = 18.dp, vertical = 18.dp)
                 ) {
-                    Box(
+                    Row(
                         modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(CircleShape)
+                                .background(drawerPalette.accentBlue),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = drawerInitial,
+                                color = Color.White,
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = drawerDisplayName,
+                                fontSize = 15.sp,
+                                lineHeight = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = drawerPalette.textPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = drawerPalette.pillBg
+                            ) {
+                                Text(
+                                    text = drawerCode,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = drawerPalette.textPrimary,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                )
+                            }
+                            Text(
+                                text = "UPAO S",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = drawerPalette.textSecondary
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 14.dp),
+                        thickness = 1.dp,
+                        color = drawerPalette.border
+                    )
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        DrawerMenuCard(
+                            label = "Mi perfil",
+                            icon = Icons.Filled.Person,
+                            containerColor = drawerPalette.surface,
+                            borderColor = drawerPalette.border,
+                            iconColor = drawerPalette.textSecondary,
+                            textColor = drawerPalette.textPrimary,
+                            trailingColor = drawerPalette.textSecondary,
+                            showArrow = true,
+                            testTag = "drawer_profile_item",
+                            onClick = {
+                                coroutineScope.launch { drawerState.close(); onOpenProfile() }
+                            }
+                        )
+
+                        DrawerMenuCard(
+                            label = "Cambiar de cuenta",
+                            icon = Icons.Filled.SwapHoriz,
+                            containerColor = drawerPalette.surface,
+                            borderColor = drawerPalette.border,
+                            iconColor = drawerPalette.textSecondary,
+                            textColor = drawerPalette.textPrimary,
+                            trailingColor = drawerPalette.textSecondary,
+                            showArrow = true,
+                            testTag = "drawer_switch_account_item",
+                            onClick = {
+                                coroutineScope.launch { drawerState.close() }
+                                onSwitchAccount()
+                            }
+                        )
+
+                        DrawerMenuCard(
+                            label = "Acerca de",
+                            icon = Icons.Filled.Info,
+                            containerColor = drawerPalette.surface,
+                            borderColor = drawerPalette.border,
+                            iconColor = drawerPalette.textSecondary,
+                            textColor = drawerPalette.textPrimary,
+                            trailingColor = drawerPalette.textSecondary,
+                            showArrow = true,
+                            testTag = "drawer_about_item",
+                            onClick = {
+                                coroutineScope.launch { drawerState.close() }
+                                showAboutDialog = true
+                            }
+                        )
+
+                        DrawerMenuCard(
+                            label = "Cerrar sesión",
+                            icon = Icons.AutoMirrored.Filled.Logout,
+                            containerColor = drawerPalette.dangerBg,
+                            borderColor = drawerPalette.dangerBorder,
+                            iconColor = drawerPalette.dangerText,
+                            textColor = drawerPalette.dangerText,
+                            trailingColor = drawerPalette.dangerText,
+                            showArrow = false,
+                            testTag = "drawer_logout_item",
+                            onClick = {
+                                coroutineScope.launch { drawerState.close() }
+                                cerrarSesion()
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.weight(1f))
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.Person,
+                            imageVector = Icons.Outlined.Info,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(32.dp)
+                            tint = drawerPalette.textMuted,
+                            modifier = Modifier.size(16.dp)
                         )
-                    }
-                    Spacer(modifier = Modifier.height(12.dp))
-                    profileName?.takeIf { it.isNotBlank() }?.let { name ->
-                        Text(name, style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Spacer(modifier = Modifier.height(4.dp))
-                    }
-                    Text(
-                        text = usuario ?: "Estudiante UPAO",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "UPAO S",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-
-
-
-                NavigationDrawerItem(
-                    label = { Text("Mi perfil", fontWeight = FontWeight.Medium) },
-                    icon = { Icon(Icons.Filled.Person, contentDescription = null, modifier = Modifier.size(22.dp)) },
-                    selected = false,
-                    onClick = { coroutineScope.launch { drawerState.close(); onOpenProfile() } },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                NavigationDrawerItem(
-                    label = { Text("Cambiar de cuenta", fontWeight = FontWeight.Medium) },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Filled.Person,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        onSwitchAccount()
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                NavigationDrawerItem(
-                    label = { Text("Acerca de", fontWeight = FontWeight.Medium) },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        showAboutDialog = true
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                NavigationDrawerItem(
-                    label = {
                         Text(
-                            "Cerrar sesión",
+                            text = "v.$appVersion",
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.error
+                            color = drawerPalette.textMuted
                         )
-                    },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Logout,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    selected = false,
-                    onClick = {
-                        coroutineScope.launch { drawerState.close() }
-                        cerrarSesion()
-                    },
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                Text(
-                    text = "v.$appVersion",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(start = 24.dp, bottom = 20.dp)
-                )
+                    }
+                }
             }
         }
     ) {
@@ -525,19 +585,22 @@ fun HomeScreen(
     if (showAboutDialog) {
         AlertDialog(
             onDismissRequest = { showAboutDialog = false },
+            containerColor = drawerPalette.surface,
+            titleContentColor = drawerPalette.textPrimary,
+            textContentColor = drawerPalette.textSecondary,
             icon = {
                 Box(
                     modifier = Modifier
                         .size(52.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .background(drawerPalette.softBlueBg),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Filled.School,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(30.dp)
+                        tint = drawerPalette.accentBlue,
+                        modifier = Modifier.size(28.dp)
                     )
                 }
             },
@@ -549,13 +612,14 @@ fun HomeScreen(
                     Text(
                         text = "UPAO S",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = drawerPalette.textPrimary
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = "v.$appVersion",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = drawerPalette.textMuted
                     )
                 }
             },
@@ -567,18 +631,19 @@ fun HomeScreen(
                     Text(
                         text = "Aplicación estudiantil no oficial diseñada para optimizar el acceso a cursos, horarios, notas, asistencias, pagos y tareas UPAO.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = drawerPalette.textSecondary
                     )
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        color = drawerPalette.surfaceSoftBlue,
+                        border = BorderStroke(1.dp, drawerPalette.borderBlue),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(
                                 text = "Desarrollado para la comunidad universitaria UPAO.",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = drawerPalette.textPrimary
                             )
                         }
                     }
@@ -586,10 +651,65 @@ fun HomeScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showAboutDialog = false }) {
-                    Text("Cerrar")
+                    Text("Cerrar", color = drawerPalette.accentBlue, fontWeight = FontWeight.SemiBold)
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun DrawerMenuCard(
+    label: String,
+    icon: ImageVector,
+    containerColor: Color,
+    borderColor: Color,
+    iconColor: Color,
+    textColor: Color,
+    trailingColor: Color,
+    showArrow: Boolean,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 50.dp)
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = textColor,
+                modifier = Modifier.weight(1f)
+            )
+            if (showArrow) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = trailingColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
 }
 
