@@ -7,11 +7,16 @@ import kotlin.math.roundToInt
 
 object Calculators {
 
-    /**
-     * Pesos por periodo: 202520 usa 25/20/30/25; los siguientes, 20/30/20/30.
-     * Si el nombre no coincide con las siglas estándar, intenta usar el peso reportado por Banner.
-     */
-    fun pesoComponente(componente: ComponenteDetalle, periodo: String? = null): Double? {
+    private val percentRegex = Regex("""(\d+(?:\.\d+)?)\s*%""")
+
+    private fun parseWeightValue(raw: Any?): Double? {
+        val text = raw?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val cleaned = text.replace("%", "").replace(",", ".").trim()
+        val parsed = toDouble(cleaned)?.takeIf { it.isFinite() && it > 0.0 && it <= 100.0 } ?: return null
+        return if (parsed < 1.0) parsed * 100.0 else parsed
+    }
+
+    private fun recognizedDefaultWeight(componente: ComponenteDetalle, periodo: String? = null): Double? {
         val texto = listOfNotNull(
             componente.nombre,
             componente.description,
@@ -20,15 +25,133 @@ object Calculators {
         ).joinToString(" ").uppercase(Locale.ROOT)
 
         val historico = periodo?.trim() == "202520"
-        val reconocido = when {
+        return when {
             texto.contains("FINAL") || texto.contains("EVF") -> if (historico) 25.0 else 30.0
             texto.contains("PARCIAL") || texto.contains("EVP") -> if (historico) 20.0 else 30.0
             texto.contains("EP2") || texto.contains("PROCESO 2") || texto.contains("PERMANENTE 2") || texto.contains("EP 2") -> if (historico) 30.0 else 20.0
             texto.contains("EP1") || texto.contains("PROCESO 1") || texto.contains("PERMANENTE 1") || texto.contains("EP 1") -> if (historico) 25.0 else 20.0
             else -> null
         }
-        return reconocido ?: toDouble(componente.displayPeso?.toString()?.replace("%", ""))
-            ?.takeIf { it.isFinite() && it > 0 && it <= 100 }
+    }
+
+    private fun normalizedGrade(rawNota: Any?, sobreRaw: Any?): Double? {
+        val raw = toDouble(rawNota)?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+        val sobre = toDouble(sobreRaw)?.takeIf { it.isFinite() && it > 0.0 }
+        if (sobre != null && kotlin.math.abs(sobre - 20.0) > 1e-6 && raw <= sobre + 1e-6) {
+            return (raw / sobre * 20.0).coerceIn(0.0, 20.0)
+        }
+        return raw.takeIf { it in 0.0..20.0 }
+    }
+
+    /**
+     * Resuelve el peso real de un componente.
+     * Prioriza los pesos explícitos reportados por Banner (peso/weight/percentage/porcentaje, etc.
+     * o porcentaje indicado en el nombre) antes de recurrir a los pesos estándar del periodo
+     * (25/20/30/25 en 202520; 20/30/20/30 en los demás).
+     */
+    fun pesoComponente(componente: ComponenteDetalle, periodo: String? = null): Double? {
+        val directExplicit = listOf(
+            componente.peso,
+            componente.weight,
+            componente.percentage,
+            componente.porcentaje,
+            componente.percent,
+            componente.porcentajeComponente,
+            componente.pesoComponente
+        ).firstNotNullOfOrNull(::parseWeightValue)
+        if (directExplicit != null) return directExplicit
+
+        val reconocido = recognizedDefaultWeight(componente, periodo)
+
+        val textWeight = listOfNotNull(componente.nombre, componente.description, componente.componente)
+            .firstNotNullOfOrNull { label ->
+                percentRegex.find(label)?.groupValues?.getOrNull(1)?.let(::parseWeightValue)
+            }
+        if (textWeight != null) return textWeight
+
+        val achievedCandidate = parseWeightValue(componente.porcentajeLogrado)
+        if (achievedCandidate != null) {
+            val grade20 = normalizedGrade(componente.displayNota, componente.puntajeSobre)
+            val looksLikeAchievedPct = grade20 != null &&
+                kotlin.math.abs((grade20 / 20.0 * 100.0) - achievedCandidate) < 0.5 &&
+                reconocido != null &&
+                kotlin.math.abs(reconocido - achievedCandidate) > 0.5
+            if (!looksLikeAchievedPct) return achievedCandidate
+        }
+
+        return reconocido
+    }
+
+    private fun resolvedComponentWeights(
+        componentes: List<ComponenteDetalle>,
+        periodo: String? = null
+    ): List<Double?> {
+        val raw = componentes.map { pesoComponente(it, periodo) }
+        val nonNull = raw.filterNotNull()
+        if (nonNull.isEmpty()) return raw
+
+        val allUnitFraction = nonNull.all { it <= 1.0 } && nonNull.sum() <= 1.0 + 1e-6
+        val scaled = if (allUnitFraction) {
+            raw.map { it?.let { w -> w * 100.0 } }
+        } else {
+            raw
+        }
+
+        val total = scaled.filterNotNull().sum()
+        return if (total > 100.0 + 1e-6) {
+            val factor = 100.0 / total
+            scaled.map { it?.let { w -> w * factor } }
+        } else {
+            scaled
+        }
+    }
+
+    private data class WeightedGradeSample(val nota20: Double, val pesoPct: Double)
+
+    private fun collectGradedSamples(
+        componentes: List<ComponenteDetalle>,
+        periodo: String? = null
+    ): List<WeightedGradeSample> {
+        val weights = resolvedComponentWeights(componentes, periodo)
+        val samples = mutableListOf<WeightedGradeSample>()
+
+        componentes.forEachIndexed { index, componente ->
+            val compPeso = weights[index]?.takeIf { it.isFinite() && it > 0.0 && it <= 100.0 } ?: return@forEachIndexed
+            val directNota = normalizedGrade(componente.displayNota, componente.puntajeSobre)
+            if (directNota != null) {
+                samples.add(WeightedGradeSample(nota20 = directNota, pesoPct = compPeso))
+            } else if (componente.subcomponentes.isNotEmpty()) {
+                val subRawWeights = componente.subcomponentes.map { sub ->
+                    parseWeightValue(sub.displayPeso)
+                        ?: sub.displayNombre.let { label ->
+                            percentRegex.find(label)?.groupValues?.getOrNull(1)?.let(::parseWeightValue)
+                        }
+                }
+                val hasAnySubWeight = subRawWeights.any { it != null && it > 0.0 }
+                val subTotalWeight = subRawWeights.filterNotNull().sum()
+                val equalShare = 100.0 / componente.subcomponentes.size
+
+                componente.subcomponentes.forEachIndexed { subIdx, sub ->
+                    val subNota = normalizedGrade(sub.displayNota, sub.puntajeSobre) ?: return@forEachIndexed
+                    val subSharePct = when {
+                        hasAnySubWeight -> {
+                            val w = subRawWeights[subIdx]?.takeIf { it > 0.0 } ?: return@forEachIndexed
+                            if (subTotalWeight > 0.0 && (subTotalWeight > 100.0 + 1e-6 || subTotalWeight <= 1.0 + 1e-6)) {
+                                w / subTotalWeight * 100.0
+                            } else {
+                                w
+                            }
+                        }
+                        else -> equalShare
+                    }
+                    val effectivePeso = compPeso * subSharePct / 100.0
+                    if (effectivePeso > 0.0) {
+                        samples.add(WeightedGradeSample(nota20 = subNota, pesoPct = effectivePeso))
+                    }
+                }
+            }
+        }
+        return samples
     }
 
     data class Progreso(val acumulado: Double, val pesoEvaluado: Double) {
@@ -38,15 +161,11 @@ object Calculators {
     }
 
     fun progreso(componentes: List<ComponenteDetalle>, periodo: String? = null): Progreso? {
-        var puntos = 0.0
-        var evaluado = 0.0
-        for (componente in componentes) {
-            val nota = toDouble(componente.displayNota)?.takeIf { it.isFinite() && it in 0.0..20.0 } ?: continue
-            val peso = pesoComponente(componente, periodo)?.takeIf { it.isFinite() && it > 0 && it <= 100 } ?: continue
-            puntos += nota * peso / 100.0
-            evaluado += peso
-        }
-        return if (evaluado > 0 && evaluado <= 100.0 + 1e-9) Progreso(puntos, evaluado) else null
+        val samples = collectGradedSamples(componentes, periodo)
+        if (samples.isEmpty()) return null
+        val puntos = samples.sumOf { it.nota20 * it.pesoPct / 100.0 }
+        val evaluado = samples.sumOf { it.pesoPct }
+        return if (evaluado > 0.0 && evaluado <= 100.0 + 1e-9) Progreso(puntos, evaluado) else null
     }
 
     fun progresoCurso(curso: com.example.upaos.data.model.CourseGrade, periodo: String? = null): Progreso? =
@@ -74,20 +193,8 @@ object Calculators {
      * Ejemplo: EP1=15 (20%) y Parcial=14 (30%) -> (15*20 + 14*30) / (20+30) = 14.4
      */
     fun calcularNotaActual(componentes: List<ComponenteDetalle>, periodo: String? = null): Double? {
-        var sumaPonderada = 0.0
-        var sumaPesos = 0.0
-
-        for (c in componentes) {
-            val peso = pesoComponente(c, periodo) ?: continue
-            if (peso <= 0.0) continue
-            val nota = toDouble(c.displayNota) ?: continue
-
-            sumaPonderada += nota * peso
-            sumaPesos += peso
-        }
-
-        if (sumaPesos <= 0.0) return null
-        return (sumaPonderada / sumaPesos * 100.0).roundToInt() / 100.0
+        val prog = progreso(componentes, periodo) ?: return null
+        return (prog.promedio * 100.0).roundToInt() / 100.0
     }
 
     /**
@@ -100,32 +207,24 @@ object Calculators {
             txt.contains("FINAL") || txt.contains("EVF")
         }
 
-        if (compFinal != null && toDouble(compFinal.displayNota) != null) {
+        if (compFinal != null && normalizedGrade(compFinal.displayNota, compFinal.puntajeSobre) != null) {
             return Pair(null, emptyList())
         }
 
-        var sumaPonderada = 0.0
+        val weights = resolvedComponentWeights(componentes, periodo)
         val pendientes = mutableListOf<String>()
-        var componentesConNota = 0
-
-        for (c in componentes) {
-            val peso = pesoComponente(c, periodo) ?: continue
-            if (peso <= 0.0) continue
-            val nota = toDouble(c.displayNota)
-
-            if (nota == null) {
+        componentes.forEachIndexed { index, c ->
+            val peso = weights[index] ?: return@forEachIndexed
+            if (peso <= 0.0) return@forEachIndexed
+            val hasDirect = normalizedGrade(c.displayNota, c.puntajeSobre) != null
+            val hasSub = c.subcomponentes.any { normalizedGrade(it.displayNota, it.puntajeSobre) != null }
+            if (!hasDirect && !hasSub) {
                 pendientes.add(c.displayNombre)
-            } else {
-                sumaPonderada += nota * (peso / 100.0)
-                componentesConNota++
             }
         }
 
-        if (componentesConNota == 0) {
-            return Pair(null, emptyList())
-        }
-
-        val proyectada = (sumaPonderada * 100.0).roundToInt() / 100.0
+        val prog = progreso(componentes, periodo) ?: return Pair(null, emptyList())
+        val proyectada = (prog.acumulado * 100.0).roundToInt() / 100.0
         return Pair(proyectada, pendientes)
     }
 

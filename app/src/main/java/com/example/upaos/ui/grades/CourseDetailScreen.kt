@@ -123,7 +123,9 @@ fun CourseDetailScreen(
                 }
                 else -> {
                     val progreso = com.example.upaos.data.upao.Calculators.progreso(componentes, periodo)
-                    val puntosAcumulados = progreso?.acumulado ?: 0.0
+                    val puntosAcumulados = progreso?.acumulado
+                        ?: com.example.upaos.data.upao.Calculators.toDouble(notaProyectada)
+                        ?: 0.0
                     val promedioParcial = progreso?.promedio
                     if (promedioParcial != null || notaProyectada != null) {
                         CampusCard(

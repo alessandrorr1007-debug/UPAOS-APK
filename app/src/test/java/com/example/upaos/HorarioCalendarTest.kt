@@ -100,5 +100,102 @@ class HorarioCalendarTest {
         assertEquals("Práctica", resP.nombreCompleto)
         assertTrue(resP.esPrac)
     }
-}
 
+    @Test fun scheduleWeekDaysSpansMondayThroughSunday() {
+        val wednesday = date("2026-11-18")
+        val week = scheduleWeekDays(wednesday)
+        assertEquals(7, week.size)
+        assertEquals(date("2026-11-16"), week.first()) // Monday
+        assertEquals(date("2026-11-22"), week.last())  // Sunday
+        assertEquals(Calendar.MONDAY, scheduleCalendar(week.first()).get(Calendar.DAY_OF_WEEK))
+        assertEquals(Calendar.SUNDAY, scheduleCalendar(week.last()).get(Calendar.DAY_OF_WEEK))
+    }
+
+    @Test fun moveScheduleWeekNavigatesAcrossMonthsAndYears() {
+        val dec30 = date("2026-12-30")
+        assertEquals(date("2027-01-06"), moveScheduleWeek(dec30, 1))
+        assertEquals(date("2026-12-23"), moveScheduleWeek(dec30, -1))
+    }
+
+    @Test fun parseTimeMinutesHandles24hAnd12hFormats() {
+        assertEquals(8 * 60, parseTimeMinutes("08:00"))
+        assertEquals(18 * 60 + 45, parseTimeMinutes("18:45"))
+        assertEquals(14 * 60 + 15, parseTimeMinutes("2:15 PM"))
+        assertEquals(0, parseTimeMinutes("12:00 AM"))
+        assertEquals(12 * 60 + 30, parseTimeMinutes("12:30 p.m."))
+        assertNull(parseTimeMinutes(null))
+        assertNull(parseTimeMinutes("sin hora"))
+    }
+
+    @Test fun classesForScheduleWeekAggregatesAllDaysAndAssignsLanes() {
+        val mon = HorarioCurso(
+            nombre = "ARQUITECTURA DE SISTEMAS",
+            bloques = listOf(
+                HorarioBloque(dia = 0, horaInicio = "08:00", horaFin = "10:00", aula = "G703", tipo = "T"),
+                HorarioBloque(dia = 6, horaInicio = "10:00", horaFin = "12:00", aula = "H202", tipo = "L")
+            )
+        )
+        val overlap = HorarioCurso(
+            nombre = "INTERNET DE LAS COSAS",
+            bloques = listOf(
+                HorarioBloque(dia = 0, horaInicio = "09:00", horaFin = "11:00", aula = "G702", tipo = "T")
+            )
+        )
+
+        val blocks = classesForScheduleWeek(listOf(mon, overlap), date("2026-11-18"))
+        assertEquals(3, blocks.size)
+
+        val mondayBlocks = blocks.filter { it.dayIndex == 0 }
+        assertEquals(2, mondayBlocks.size)
+        assertTrue(mondayBlocks.all { it.laneCount == 2 })
+        assertEquals(setOf(0, 1), mondayBlocks.map { it.laneIndex }.toSet())
+
+        val sundayBlocks = blocks.filter { it.dayIndex == 6 }
+        assertEquals(1, sundayBlocks.size)
+        assertEquals(1, sundayBlocks.first().laneCount)
+        assertEquals(0, sundayBlocks.first().laneIndex)
+
+        // Fuera de ciclo devuelve vacío para toda la semana
+        assertTrue(classesForScheduleWeek(listOf(mon, overlap), date("2026-12-28"), "202620").isEmpty())
+    }
+
+    @Test fun horarioThemePaletteMaintainsLightAndDarkContrastAndFormatting() {
+        val light = horarioThemePalette(isDark = false)
+        val dark = horarioThemePalette(isDark = true)
+        assertFalse(light.isDark)
+        assertTrue(dark.isDark)
+        assertNotEquals(light.background, dark.background)
+        assertNotEquals(light.surface, dark.surface)
+        assertNotEquals(light.textPrimary, dark.textPrimary)
+
+        val range = formatWeekRangeLabel(date("2026-11-16"), date("2026-11-22"))
+        assertTrue(range.contains("16"))
+        assertTrue(range.contains("22"))
+        assertTrue(range.contains("2026"))
+
+        assertEquals("Pab. G G704", compactAulaLabel("PABELLÓN G G704"))
+        assertEquals("Sin aula", compactAulaLabel(""))
+    }
+
+    @Test fun weeklyHeaderFormatsMonthAndDynamicAcademicWeek() {
+        val nov17 = date("2026-11-17")
+        assertEquals("Noviembre 2026", formatWeekMonthLabel(nov17))
+
+        val semanaInfo = com.example.upaos.data.upao.AcademicCalendar.calcularSemana("202620", java.util.Date(nov17))
+        assertTrue(semanaInfo.configurada)
+        assertEquals(12, semanaInfo.semana)
+        assertEquals("Semana 12 de 17", semanaInfo.etiqueta)
+
+        val course = HorarioCurso(
+            nombre = "GOBIERNO DE DATOS",
+            bloques = listOf(
+                HorarioBloque(dia = 0, horaInicio = "19:50", horaFin = "21:35", aula = "G704", tipo = "L"),
+                HorarioBloque(dia = 0, horaInicio = "18:00", horaFin = "19:45", aula = "G704", tipo = "T")
+            )
+        )
+        val mondayBlocks = classesForScheduleWeek(listOf(course), nov17, "202620")
+            .filter { it.dayIndex == 0 }
+            .sortedWith(compareBy<WeeklyScheduleBlock> { it.startMinutes }.thenBy { it.endMinutes })
+        assertEquals(listOf("18:00", "19:50"), mondayBlocks.map { it.bloque.horaInicio })
+    }
+}

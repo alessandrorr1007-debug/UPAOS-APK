@@ -18,14 +18,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Grade
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.*
 import com.example.upaos.data.local.TokenManager
 import androidx.compose.ui.Alignment
@@ -37,6 +41,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.upaos.ui.theme.LocalUpaoDarkTheme
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.example.upaos.data.model.ComponenteDetalle
 import com.example.upaos.data.model.CourseGrade
 import com.example.upaos.data.model.GradesResponse
@@ -90,258 +98,421 @@ fun GradesContent(
         usuario?.let { u -> TokenManager(context).getCuentas().firstOrNull { it.usuario == u }?.nombre }
     }
     var mostrarDialogCompartir by remember { mutableStateOf(false) }
+    var showPonderadoSheet by remember { mutableStateOf(false) }
+
+    val isDark = LocalUpaoDarkTheme.current
+    val palette = remember(isDark) { coursesThemePalette(isDark) }
+
+    val scheduleCourses = shared.schedules[selectedPeriodo]?.listaCursos.orEmpty()
+    val attendanceCourses = shared.attendance?.asistencia.orEmpty()
+
+    val ponderadoActual: Double? = remember(cursos, notasProyectadas, promedioPeriodoRes, selectedPeriodo, promedioGeneral) {
+        var puntos = 0.0
+        var creditos = 0
+        cursos.forEach { c ->
+            val crn = c.crn ?: c.courseReferenceNumber ?: ""
+            val acumulado = calcularAcumuladoCurso(c, notasProyectadas[crn], selectedPeriodo)
+            val cr = resolverCreditosCurso(c, promedioPeriodoRes)
+            if (acumulado != null && !acumulado.isNaN() && !acumulado.isInfinite()) {
+                puntos += (acumulado * cr)
+                creditos += cr
+            }
+        }
+        val local = if (creditos > 0) (puntos / creditos).takeUnless { it.isNaN() || it.isInfinite() } else null
+        local
+            ?: promedioPeriodoRes?.ppsCalculado?.toDouble()
+            ?: promedioPeriodoRes?.ppsOficial?.toDouble()
+            ?: promedioGeneral?.takeIf { !isPendiente(it) }?.toString()?.trim()?.toDoubleOrNull()
+                ?.takeUnless { it.isNaN() || it.isInfinite() }
+    }
+
+    val lastUpdatedMs = shared.times[claveCache]
+    val lastUpdatedText = remember(lastUpdatedMs, isLoading, isRefreshing, offline) {
+        val formatted = lastUpdatedMs?.let {
+            SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(it))
+        }
+        when {
+            formatted != null && (isLoading || isRefreshing) -> "Última actualización: $formatted · Actualizando..."
+            formatted != null && offline -> "Última actualización: $formatted"
+            formatted != null -> "Última actualización: $formatted"
+            isLoading || isRefreshing -> "Actualizando cursos..."
+            else -> "Última actualización: Pendiente"
+        }
+    }
+
+    val cycleHeading = remember(selectedPeriodo, shared.currentPeriod) {
+        if (selectedPeriodo.isBlank() || shared.currentPeriod.isBlank() || selectedPeriodo == shared.currentPeriod) {
+            "Ciclo actual"
+        } else {
+            "Ciclo $selectedPeriodo"
+        }
+    }
+
     fun loadGrades() = dashboard.refresh()
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(12.dp)
+            .background(palette.background)
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 10.dp)
         ) {
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                AppCard(
-                    color = MaterialTheme.colorScheme.surface,
-                    corner = 14.dp,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp),
-                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-                    onClick = { periodosExpanded = true }
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "PERIODO",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                letterSpacing = 0.5.sp
-                            )
-                            Text(
-                                text = selectedPeriodo.ifBlank { "Periodo" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = periodosExpanded,
-                    onDismissRequest = { periodosExpanded = false }
-                ) {
-                    periodos.forEach { item ->
-                        DropdownMenuItem(
-                            text = { Text(item, fontSize = 13.sp) },
-                            onClick = {
-                                periodosExpanded = false
-                                dashboard.selectGrades(item)
-                            }
-                        )
-                    }
-                }
-            }
-
-            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                AppCard(
-                    color = MaterialTheme.colorScheme.surface,
-                    corner = 14.dp,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 11.dp),
-                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
-                    onClick = { carrerasExpanded = true }
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "NIVEL / CARRERA",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                letterSpacing = 0.5.sp
-                            )
-                            Text(
-                                text = selectedCarrera.ifBlank { "Carrera" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = carrerasExpanded,
-                    onDismissRequest = { carrerasExpanded = false }
-                ) {
-                    carreras.forEach { item ->
-                        DropdownMenuItem(
-                            text = { Text(item, fontSize = 13.sp) },
-                            onClick = {
-                                carrerasExpanded = false
-                                dashboard.selectGrades(selectedPeriodo, item)
-                            }
-                        )
-                    }
-                }
-            }
-
-            AppCard(
-                color = MaterialTheme.colorScheme.surface,
-                corner = 14.dp,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 11.dp),
-                modifier = Modifier.fillMaxHeight(),
-                onClick = {
-                    if (cursos.isEmpty()) {
-                        Toast.makeText(context, "No hay notas para compartir todavía", Toast.LENGTH_SHORT).show()
-                    } else {
-                        mostrarDialogCompartir = true
-                    }
-                }
+            // Encabezado MIS CURSOS / Ciclo actual + acciones discretas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier.fillMaxHeight(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Share,
-                        contentDescription = "Compartir resumen de notas",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "MIS CURSOS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = palette.accentBlue,
+                        letterSpacing = 0.8.sp
+                    )
+                    Text(
+                        text = cycleHeading,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = palette.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (cursos.isNotEmpty() || ponderadoActual != null) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = palette.surface,
+                            border = BorderStroke(1.dp, palette.border),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .testTag("courses_ponderado_pill")
+                                .clickable { showPonderadoSheet = true }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Text(
+                                    text = "Pond. ${formatPromedio(ponderadoActual)}",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.textPrimary
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.Info,
+                                    contentDescription = "Ver desglose del ponderado",
+                                    tint = palette.accentBlue,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    IconButton(
+                        onClick = {
+                            if (cursos.isEmpty()) {
+                                Toast.makeText(context, "No hay notas para compartir todavía", Toast.LENGTH_SHORT).show()
+                            } else {
+                                mostrarDialogCompartir = true
+                            }
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("courses_share_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = "Compartir resumen de notas",
+                            tint = palette.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
-        }
 
-        Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-        if (offline || isLoading || isRefreshing) {
-            Column(Modifier.padding(vertical = 4.dp)) {
-                com.example.upaos.ui.home.Freshness(shared.times[claveCache], !offline, isLoading || isRefreshing)
-            }
-        }
-
-        if (offline && cursos.isNotEmpty()) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(10.dp),
+            // Selectores de Periodo y Nivel / Carrera
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "Datos guardados · pendiente de actualizar",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = errorMessage == null && (cursos.isNotEmpty() || promedioGeneral != null || promedioPeriodoRes != null),
-            enter = fadeIn(tween(220)) + expandVertically(),
-            exit = fadeOut(tween(180))
-        ) {
-            Column {
-                PromedioCard(
-                    promedioGeneral = promedioGeneral,
-                    promedioPeriodoRes = promedioPeriodoRes,
-                    cursos = cursos,
-                    notasProyectadas = notasProyectadas,
-                    periodo = selectedPeriodo
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-            }
-        }
-
-        when {
-            isLoading && cursos.isEmpty() -> {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    repeat(4) { SkeletonCourseCard() }
-                }
-            }
-            errorMessage != null && cursos.isEmpty() -> {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    ErrorView(
-                        message = errorMessage!!,
-                        onRetry = { loadGrades() },
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-            }
-            cursos.isEmpty() -> {
-                EmptyState(
-                    icon = Icons.Filled.Grade,
-                    title = "No hay cursos registrados",
-                    subtitle = "No hay cursos para el periodo $selectedPeriodo.",
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                )
-            }
-            else -> {
-                RefreshableContent(
-                    isRefreshing = isRefreshing,
-                    onRefresh = {
-                        loadGrades()
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    LazyColumn(
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                        contentPadding = PaddingValues(bottom = 12.dp),
-                        modifier = Modifier.fillMaxSize()
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = palette.surface,
+                        border = BorderStroke(1.dp, palette.border),
+                        shadowElevation = if (isDark) 0.dp else 1.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .testTag("courses_period_selector")
+                            .clickable { periodosExpanded = true }
                     ) {
-                        items(cursos) { course ->
-                            val crnCard = course.crn ?: course.courseReferenceNumber ?: ""
-                            CourseGradeCard(
-                                token = token,
-                                periodo = selectedPeriodo,
-                                carrera = selectedCarrera,
-                                course = course,
-                                notaProyectada = notasProyectadas[crnCard],
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.CalendarMonth,
+                                contentDescription = null,
+                                tint = palette.accentBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Periodo",
+                                    fontSize = 11.sp,
+                                    color = palette.textMuted,
+                                    maxLines = 1
+                                )
+                                Text(
+                                    text = selectedPeriodo.ifBlank { "Periodo" },
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Seleccionar periodo",
+                                tint = palette.textMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = periodosExpanded,
+                        onDismissRequest = { periodosExpanded = false }
+                    ) {
+                        periodos.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item, fontSize = 13.sp) },
                                 onClick = {
-                                    onOpenCourse(
-                                        selectedPeriodo,
-                                        selectedCarrera,
-                                        crnCard,
-                                        course.displayNombre
-                                    )
+                                    periodosExpanded = false
+                                    dashboard.selectGrades(item)
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = palette.surface,
+                        border = BorderStroke(1.dp, palette.border),
+                        shadowElevation = if (isDark) 0.dp else 1.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(16.dp))
+                            .testTag("courses_career_selector")
+                            .clickable { carrerasExpanded = true }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.School,
+                                contentDescription = null,
+                                tint = palette.accentBlue,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Nivel / Carrera",
+                                    fontSize = 11.sp,
+                                    color = palette.textMuted,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = selectedCarrera.ifBlank { "UG" },
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = "Seleccionar carrera",
+                                tint = palette.textMuted,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = carrerasExpanded,
+                        onDismissRequest = { carrerasExpanded = false }
+                    ) {
+                        carreras.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item, fontSize = 13.sp) },
+                                onClick = {
+                                    carrerasExpanded = false
+                                    dashboard.selectGrades(selectedPeriodo, item)
                                 }
                             )
                         }
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Última actualización
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Schedule,
+                    contentDescription = null,
+                    tint = palette.textMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = lastUpdatedText,
+                    fontSize = 12.sp,
+                    color = palette.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Lista en una sola columna
+            when {
+                isLoading && cursos.isEmpty() -> {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        repeat(4) { SkeletonCourseCard() }
+                    }
+                }
+                errorMessage != null && cursos.isEmpty() -> {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        ErrorView(
+                            message = errorMessage!!,
+                            onRetry = { loadGrades() },
+                            modifier = Modifier.align(Alignment.Center)
+                        )
+                    }
+                }
+                cursos.isEmpty() -> {
+                    EmptyState(
+                        icon = Icons.Filled.Grade,
+                        title = "No hay cursos registrados",
+                        subtitle = "No hay cursos para el periodo $selectedPeriodo.",
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
+                else -> {
+                    RefreshableContent(
+                        isRefreshing = isRefreshing,
+                        onRefresh = { loadGrades() },
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        LazyColumn(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(top = 2.dp, bottom = 18.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            itemsIndexed(
+                                items = cursos,
+                                key = { index, course ->
+                                    "${course.crn ?: course.courseReferenceNumber ?: ""}_${course.displayNombre}_$index"
+                                }
+                            ) { index, course ->
+                                val crnCard = course.crn ?: course.courseReferenceNumber ?: ""
+                                val credits = resolverCreditosCurso(course, promedioPeriodoRes)
+                                val scheduleMatch = scheduleCourses.firstOrNull {
+                                    (crnCard.isNotBlank() && it.crn == crnCard) ||
+                                        it.displayNombre.equals(course.displayNombre, ignoreCase = true)
+                                }
+                                val attendanceMatch = attendanceCourses.firstOrNull {
+                                    (crnCard.isNotBlank() && it.crn == crnCard) ||
+                                        it.displayNombre.equals(course.displayNombre, ignoreCase = true)
+                                }
+                                CourseModernCard(
+                                    course = course,
+                                    periodo = selectedPeriodo,
+                                    creditos = credits,
+                                    notaProyectada = notasProyectadas[crnCard],
+                                    horarioCurso = scheduleMatch,
+                                    asistenciaCurso = attendanceMatch,
+                                    palette = palette,
+                                    index = index,
+                                    onClick = {
+                                        onOpenCourse(
+                                            selectedPeriodo,
+                                            selectedCarrera,
+                                            crnCard,
+                                            course.displayNombre
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showPonderadoSheet) {
+        val fuenteTexto = when {
+            promedioPeriodoRes?.ppsOficial != null -> "Oficial (Cuadro de Mérito)"
+            promedioPeriodoRes?.ppsCalculado != null -> "Estimado (Notas × Créditos)"
+            ponderadoActual != null -> "Acumulado del ciclo (Puntos ÷ Créditos)"
+            else -> "Sin notas registradas"
+        }
+        ModalBottomSheet(
+            onDismissRequest = { showPonderadoSheet = false },
+            containerColor = palette.surface,
+            tonalElevation = 6.dp,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            DetallePonderadoSheet(
+                promedioGeneral = ponderadoActual,
+                fuenteTexto = fuenteTexto,
+                promedioPeriodoRes = promedioPeriodoRes,
+                cursos = cursos,
+                notasProyectadas = notasProyectadas,
+                periodo = selectedPeriodo,
+                onClose = { showPonderadoSheet = false }
+            )
         }
     }
 

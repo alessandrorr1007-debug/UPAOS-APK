@@ -78,4 +78,88 @@ class GradeProgressTest {
         assertEquals(3.2, calcularAcumuladoCurso(course, 2.6, "202620")!!, 1e-9)
         assertEquals(3.65, calcularAcumuladoCurso(course, 2.6, "202520")!!, 1e-9)
     }
+
+    @Test fun ep1AndParcialEqualToElevenAccumulateTo550() {
+        val course = CourseGrade(
+            componentes = listOf(
+                ComponenteDetalle(nombre = "EP1", peso = 20.0, nota = 11.0),
+                ComponenteDetalle(nombre = "PARCIAL", peso = 30.0, nota = 11.0),
+                ComponenteDetalle(nombre = "EP2", peso = 20.0, nota = null),
+                ComponenteDetalle(nombre = "FINAL", peso = 30.0, nota = null)
+            )
+        )
+        val progress = Calculators.progresoCurso(course, "202620")!!
+        assertEquals(5.50, progress.acumulado, 1e-9)
+        assertEquals(50.0, progress.pesoEvaluado, 1e-9)
+        assertEquals(11.0, progress.promedio, 1e-9)
+        val acumuladoCursos = calcularAcumuladoCurso(course, periodo = "202620")!!
+        assertEquals(5.50, acumuladoCursos, 1e-9)
+        assertEquals("5.50", com.example.upaos.ui.grades.formatCourseAverage(acumuladoCursos))
+    }
+
+    @Test fun explicitBannerWeightsOverrideStandardPeriodDefaults() {
+        val comps = listOf(
+            ComponenteDetalle(nombre = "EP1", peso = 15.0, nota = 12.0),
+            ComponenteDetalle(nombre = "EXAMEN PARCIAL", peso = 35.0, nota = 16.0),
+            ComponenteDetalle(nombre = "EP2", peso = 15.0, nota = null),
+            ComponenteDetalle(nombre = "EXAMEN FINAL", peso = 35.0, nota = null)
+        )
+        assertEquals(listOf(15.0, 35.0, 15.0, 35.0), comps.map { Calculators.pesoComponente(it, "202620") })
+        val progress = Calculators.progreso(comps, "202620")!!
+        // 12 * 0.15 + 16 * 0.35 = 1.80 + 5.60 = 7.40
+        assertEquals(7.40, progress.acumulado, 1e-9)
+        assertEquals(50.0, progress.pesoEvaluado, 1e-9)
+        assertEquals(14.80, progress.promedio, 1e-9)
+        assertEquals(14.80, Calculators.calcularNotaActual(comps, "202620")!!, 1e-9)
+        assertEquals(7.40, Calculators.calcularNotaProyectada(comps, "202620").first!!, 1e-9)
+    }
+
+    @Test fun fractionalWeightsNon20ScalesSubcomponentsAndAchievedPercentGuardWork() {
+        // Fractional weights 0.25 each
+        val fractional = listOf(
+            ComponenteDetalle(nombre = "EP1", peso = 0.25, nota = 12.0),
+            ComponenteDetalle(nombre = "PARCIAL", peso = 0.25, nota = 16.0),
+            ComponenteDetalle(nombre = "EP2", peso = 0.25, nota = null),
+            ComponenteDetalle(nombre = "FINAL", peso = 0.25, nota = null)
+        )
+        val fracProg = Calculators.progreso(fractional, "202620")!!
+        assertEquals(7.0, fracProg.acumulado, 1e-9)
+        assertEquals(14.0, fracProg.promedio, 1e-9)
+
+        // Score on /100 scale (75/100 = 15/20 at 20% weight -> 3.0 pts)
+        val scaled = listOf(
+            ComponenteDetalle(nombre = "Evaluación (20%)", puntajeObtenido = 75.0, puntajeSobre = 100.0)
+        )
+        val scaledProg = Calculators.progreso(scaled, "202620")!!
+        assertEquals(3.0, scaledProg.acumulado, 1e-9)
+        assertEquals(15.0, scaledProg.promedio, 1e-9)
+
+        // Subcomponents fallback when parent nota is null: 50% of EP1(20%) = 10% weight, 16 * 0.10 = 1.60
+        val withSub = listOf(
+            ComponenteDetalle(
+                nombre = "EP1",
+                peso = 20.0,
+                nota = null,
+                hasSubComponents = true,
+                subcomponentes = listOf(
+                    com.example.upaos.data.model.SubComponente(nombre = "PC1", peso = 50.0, nota = 16.0),
+                    com.example.upaos.data.model.SubComponente(nombre = "PC2", peso = 50.0, nota = null)
+                )
+            )
+        )
+        val subProg = Calculators.progreso(withSub, "202620")!!
+        assertEquals(1.60, subProg.acumulado, 1e-9)
+        assertEquals(10.0, subProg.pesoEvaluado, 1e-9)
+        assertEquals(16.0, subProg.promedio, 1e-9)
+
+        // percentAchieved=55.0 (for 11/20) must NOT override EP1's standard 20% weight when peso is null
+        val ep1WithAchievedOnly = ComponenteDetalle(
+            nombre = "EP1",
+            peso = null,
+            porcentajeLogrado = 55.0,
+            puntajeObtenido = 11.0,
+            puntajeSobre = 20.0
+        )
+        assertEquals(20.0, Calculators.pesoComponente(ep1WithAchievedOnly, "202620")!!, 1e-9)
+    }
 }
