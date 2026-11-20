@@ -35,6 +35,7 @@ import com.example.upaos.data.model.AsistenciaCurso
 import com.example.upaos.data.model.CourseGrade
 import com.example.upaos.data.model.HorarioCurso
 import com.example.upaos.data.model.extraerNombreDocente
+import com.example.upaos.ui.components.CourseIconBadgeDark
 import com.example.upaos.ui.components.toTitleCase
 import java.util.Locale
 
@@ -174,12 +175,12 @@ fun CourseModernCard(
                 .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Icono de curso con fondo vibrante
+            // Icono de curso con fondo azul 75/15/10
             Box(
                 modifier = Modifier
                     .size(52.dp)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(style.iconBgColor),
+                    .background(if (palette.isDark) CourseIconBadgeDark else style.iconBgColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(

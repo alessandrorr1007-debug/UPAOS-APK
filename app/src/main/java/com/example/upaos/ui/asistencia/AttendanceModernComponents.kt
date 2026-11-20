@@ -19,17 +19,6 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.rounded.AccountBalance
-import androidx.compose.material.icons.rounded.Architecture
-import androidx.compose.material.icons.rounded.AutoStories
-import androidx.compose.material.icons.rounded.BarChart
-import androidx.compose.material.icons.rounded.Biotech
-import androidx.compose.material.icons.rounded.Code
-import androidx.compose.material.icons.rounded.Groups
-import androidx.compose.material.icons.rounded.Hub
-import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.Memory
-import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -56,9 +45,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.upaos.data.upao.AcademicCalendar
-import java.text.Normalizer
-import java.util.Locale
-import kotlin.math.abs
+import com.example.upaos.ui.components.CourseIconBadgeDark
+import com.example.upaos.ui.components.CourseIconBadgeLight
+import com.example.upaos.ui.components.resolveCourseSubjectIcon
 
 data class AttendanceThemePalette(
     val isDark: Boolean,
@@ -202,71 +191,10 @@ data class AttendanceCourseIconStyle(
 )
 
 fun resolveAttendanceCourseIcon(courseName: String, crn: String? = null, index: Int = 0): AttendanceCourseIconStyle {
-    val normalized = Normalizer.normalize(courseName, Normalizer.Form.NFD)
-        .replace(Regex("\\p{InCombiningDiacriticalMarks}+"), "")
-        .lowercase(Locale.ROOT)
-
-    return when {
-        listOf("machine", "aprendizaje", "ia", "inteligencia artificial", "deep", "redes neuron", "hardware", "iot", "micro").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Memory, Color(0xFF0D9F72))
-
-        listOf("automatiz", "proceso", "arquitectura", "sistema").any {
-            normalized.contains(it)
-        } -> if (normalized.contains("automatiz") || normalized.contains("proceso")) {
-            AttendanceCourseIconStyle(Icons.Rounded.Layers, Color(0xFF1D72F3))
-        } else {
-            AttendanceCourseIconStyle(Icons.Rounded.Code, Color(0xFF1D72F3))
-        }
-
-        listOf("agile", "program", "algorit", "softw", "web", "movil", "compil", "codigo").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Code, Color(0xFF1D72F3))
-
-        listOf("customer", "client", "usuario", "persona", "equipo", "lideraz", "comunic", "human").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Groups, Color(0xFF7C5CFF))
-
-        listOf("percepcion", "vision", "estadist", "analit", "metric", "probab", "calcul", "matem", "fisica").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.BarChart, Color(0xFFF59E0B))
-
-        listOf("dato", "base de datos", "gobierno", "sql", "cloud", "mineria", "econom", "contab", "finanz").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Storage, Color(0xFFE89B2D))
-
-        listOf("proyecto", "gestion", "gerenc", "tesis", "seminar", "administr", "emprend").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Hub, Color(0xFF814EF2))
-
-        listOf("biolog", "salud", "medic", "anatom", "quimic", "enferm", "farmac", "nutric").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Biotech, Color(0xFF0D9F72))
-
-        listOf("derecho", "civil", "penal", "constituc", "empresa", "market", "negoc", "comercio").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.AccountBalance, Color(0xFFE89B2D))
-
-        listOf("lengu", "ingles", "etica", "filosof", "histor", "psicolog", "redacc").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.AutoStories, Color(0xFF814EF2))
-
-        listOf("diseno", "taller", "urban", "plano", "dibujo", "construc").any {
-            normalized.contains(it)
-        } -> AttendanceCourseIconStyle(Icons.Rounded.Architecture, Color(0xFF7C5CFF))
-
-        else -> {
-            val pool = listOf(
-                AttendanceCourseIconStyle(Icons.Rounded.Code, Color(0xFF1D72F3)),
-                AttendanceCourseIconStyle(Icons.Rounded.Groups, Color(0xFF7C5CFF)),
-                AttendanceCourseIconStyle(Icons.Rounded.Memory, Color(0xFF0D9F72)),
-                AttendanceCourseIconStyle(Icons.Rounded.BarChart, Color(0xFFF59E0B)),
-                AttendanceCourseIconStyle(Icons.Rounded.Layers, Color(0xFF1D72F3))
-            )
-            val seed = abs((normalized + (crn ?: "")).hashCode() + index)
-            pool[seed % pool.size]
-        }
-    }
+    return AttendanceCourseIconStyle(
+        icon = resolveCourseSubjectIcon(courseName),
+        bgColor = CourseIconBadgeLight
+    )
 }
 
 @Composable
@@ -486,7 +414,7 @@ internal fun AttendanceModernCourseCard(
                 modifier = Modifier
                     .size(46.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(iconStyle.bgColor),
+                    .background(if (palette.isDark) CourseIconBadgeDark else iconStyle.bgColor),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
